@@ -3,95 +3,111 @@
 '''
 
 import os
+import gc
 from scripts.metadata_extraction import extract_metadata
 from scripts.audio_feature_extraction_for_file import extract_audio_features_for_frames
 from scripts.video_landmark_extraction import get_mediapipe_pose_estimation_for_frames, get_dlib_face_estimation_for_frames
 from scripts.biosignal_data_extraction import get_biosignal_data_for_frames
 from scripts.csv_out import write_features_to_csv
 
-def process_data_folder(data_directory, csv_out, log_file):
+def process_data_folder(data_directory, csv_out, processed_folders_file, batch_size=10):
     """
-    Process the data folder by walking through the directory tree and extracting features from the audio and video files.
-    Writes all extracted features for all frames for each file to a single csv file.
+    Process the data folder by extracting features and metadata from files and saving them to a CSV file.
 
     Args:
-        data_directory (str): The path to the data directory.
+        data_directory (str): The path to the directory containing the audio files.
         csv_out (str): The path to the output CSV file.
-        log_file (str): The path to the log file that tracks processed folders.
-
-    Raises:
-        ValueError: If the number of mic audio files, other audio files, video files, or JSON files in the folder is not as expected.
+        processed_folders_file (str): The file that logs processed folders.
+        batch_size (int): The number of folders to process in each batch. Default is 10.
+                          Set to 0 to process all folders without batching.
     """
+    # Load the list of already processed folders
+    processed_folders = set()
+    if os.path.exists(processed_folders_file):
+        with open(processed_folders_file, 'r') as log_file:
+            processed_folders.update(line.strip() for line in log_file.readlines())
 
-    # Read the log file to get the list of processed folders
-    if os.path.exists(log_file):
-        with open(log_file, 'r') as log:
-            processed_folders = set(line.strip() for line in log)
-    else:
-        processed_folders = set()
-
-    end = False
+    # Walk through the directory tree and process folders
+    current_batch = []
     for root, dirs, files in os.walk(data_directory):
-        if not dirs:  # Check if there are no subdirectories -- means we are at the last level -- means we process
-            
+        if not dirs:  # Check if there are no subdirectories -- means we are at the last level
             if root in processed_folders:
                 continue  # Skip already processed folders
-            
-            try:
-                # Sort files into categories -- need to process mic file as reference file so that all files
-                # have the same number of frames based on cleaned_time from mic audio -- removing any silence
-                mic_wav_files = [file for file in files if file.endswith('.wav') and 'mic' in file]
-                other_wav_files = [file for file in files if file.endswith('.wav') and 'mic' not in file]
-                mp4_files = [file for file in files if file.endswith('.mp4')]
-                json_files = [file for file in files if file.endswith('.json')]
 
-                if len(mic_wav_files) != 1:
-                    raise ValueError(f"Expected 1 mic audio file in folder, found {len(mic_wav_files)}")
-                if len(other_wav_files) != 2:
-                    raise ValueError(f"Expected 2 other audio files in folder, found {len(other_wav_files)}")
-                if len(mp4_files) != 2:
-                    raise ValueError(f"Expected 2 video files in folder, found {len(mp4_files)}")
-                if len(json_files) != 1:
-                    raise ValueError(f"Expected 1 json files in folder, found {len(json_files)}")
+            process_folder(root, csv_out, processed_folders_file, processed_folders)
 
-                end, metadata, mic_audio_features, cleaned_time, mic_feature_length = process_mic_audio(root, mic_wav_files)
-                phone_audio_features, computer_audio_features = process_other_audio(root, other_wav_files, cleaned_time, mic_feature_length)
-                phone_pose_landmarks, phone_face_landmarks, computer_pose_landmarks, computer_face_landmarks = process_videos(root, mp4_files, cleaned_time, mic_feature_length)
-                
-                biosignal_data = process_biosignal_data(root, json_files, cleaned_time, mic_feature_length)
+            if batch_size > 0 and len(processed_folders) % batch_size == 0:
+                print(f"Processed {batch_size} folders. Taking a break.")
+                break  # Stop after processing `batch_size` folders
 
-                features_for_audio_sources = {
-                    'Mic': mic_audio_features,
-                    'Phone': phone_audio_features,
-                    'Computer': computer_audio_features
-                }
+        if batch_size == 0:
+            continue  # Keep going if batch_size is set to 0 (process all folders)
 
-                phone_video_features = {
-                    'phone pose': phone_pose_landmarks,
-                    'phone face': phone_face_landmarks
-                }
 
-                computer_video_features = {
-                    'computer pose': computer_pose_landmarks,
-                    'computer face': computer_face_landmarks
-                }
 
-                features_for_video_sources = {
-                    'Phone': phone_video_features,
-                    'Computer': computer_video_features
-                }
+def process_folder(root, csv_out, processed_folders_file, processed_folders):
+    """
+    Process a single folder by extracting features and saving them to a CSV file.
 
-                write_features_to_csv(csv_out, metadata, features_for_audio_sources, features_for_video_sources, biosignal_data)
+    Args:
+        root (str): The path to the folder to process.
+        csv_out (str): The path to the output CSV file.
+        processed_folders_file (str): The file that logs processed folders.
+        processed_folders (set): A set of already processed folders.
+    """
+    try:
+        # Sort files into categories -- need to process mic file as reference file so that all files
+        # have the same number of frames based on cleaned_time from mic audio -- removing any silence
+        mic_wav_files = [file for file in os.listdir(root) if file.endswith('.wav') and 'mic' in file]
+        other_wav_files = [file for file in os.listdir(root) if file.endswith('.wav') and 'mic' not in file]
+        mp4_files = [file for file in os.listdir(root) if file.endswith('.mp4')]
+        json_files = [file for file in os.listdir(root) if file.endswith('.json')]
 
-                # If everything is successful, write the folder to the log file
-                with open(log_file, 'a') as log:
-                    log.write(f"{root}\n")
-            
-            except Exception as e:
-                print(f"Error ({e}) processing data in folder: {root}")
-        
-        if end:
-            break
+        if len(mic_wav_files) != 1:
+            raise ValueError(f"Expected 1 mic audio file in folder, found {len(mic_wav_files)}")
+        if len(other_wav_files) != 2:
+            raise ValueError(f"Expected 2 other audio files in folder, found {len(other_wav_files)}")
+        if len(mp4_files) != 2:
+            raise ValueError(f"Expected 2 video files in folder, found {len(mp4_files)}")
+        if len(json_files) != 1:
+            raise ValueError(f"Expected 1 json files in folder, found {len(json_files)}")
+
+        metadata, mic_audio_features, cleaned_time, mic_feature_length = process_mic_audio(root, mic_wav_files)
+        phone_audio_features, computer_audio_features = process_other_audio(root, other_wav_files, cleaned_time, mic_feature_length)
+        phone_pose_landmarks, phone_face_landmarks, computer_pose_landmarks, computer_face_landmarks = process_videos(root, mp4_files, cleaned_time, mic_feature_length)
+
+        biosignal_data = process_biosignal_data(root, json_files, cleaned_time, mic_feature_length)
+
+        features_for_audio_sources = {
+            'Mic': mic_audio_features,
+            'Phone': phone_audio_features,
+            'Computer': computer_audio_features
+        }
+
+        phone_video_features = {
+            'phone pose': phone_pose_landmarks,
+            'phone face': phone_face_landmarks
+        }
+
+        computer_video_features = {
+            'computer pose': computer_pose_landmarks,
+            'computer face': computer_face_landmarks
+        }
+
+        features_for_video_sources = {
+            'Phone': phone_video_features,
+            'Computer': computer_video_features
+        }
+
+        write_features_to_csv(csv_out, metadata, features_for_audio_sources, features_for_video_sources, biosignal_data)
+
+        # Log the folder as processed
+        processed_folders.add(root)
+        with open(processed_folders_file, 'a') as log_file:
+            log_file.write(root + '\n')
+
+    except Exception as e:
+        print(f"Error ({e}) processing data in folder: {root}")
 
 
 def process_biosignal_data(root, json_files, cleaned_time, mic_feature_length):
@@ -225,8 +241,8 @@ def process_mic_audio(root, mic_wav_files):
         mic_feature_length = lengths[0]
         if len(set(lengths)) != 1:
             raise ValueError("All mic audio feature lists must have the same length (frame number)")
-        end = True
-    return end, metadata, mic_audio_features, cleaned_time, mic_feature_length
+
+    return metadata, mic_audio_features, cleaned_time, mic_feature_length
 
 
         
