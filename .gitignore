@@ -1,0 +1,11 @@
+# Ignore log files
+*.log
+
+# Ignore metadata for privacy
+metadata.csv
+
+# Ignore OS-specific files
+.DS_Store
+
+# Ignore pychache 
+__pycache__/

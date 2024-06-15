@@ -1,0 +1,12 @@
+crepe 
+essentia
+numpy
+matplotlib
+mir_eval
+pandas
+scipy
+tensorflow
+opencv-python-headless
+dlib
+mediapipe
+tqdm
