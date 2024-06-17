@@ -116,7 +116,7 @@ def get_landmarks(input_video_path, output_video_path=None, output_video=False):
     return pose_landmarks_list
 
 
-def clean_pose_data(cleaned_time, pose_landmarks_list, frame_rate):
+def align_pose_data(cleaned_time, pose_landmarks_list, frame_rate):
     """
     Cleans the pose data by keeping only the segments that correspond to the cleaned audio segments.
 
@@ -126,9 +126,9 @@ def clean_pose_data(cleaned_time, pose_landmarks_list, frame_rate):
         frame_rate (int): The frame rate of the video.
 
     Returns:
-        cleaned_pose_landmarks (list): The cleaned list of pose landmarks.
+        aligned_pose_landmarks (list): The list of pose landmarks aligned with audio data.
     """
-    cleaned_pose_landmarks = []
+    aligned_pose_landmarks = []
     frame_duration_ms = 1000 / frame_rate
 
     # Ensure cleaned_time is in milliseconds
@@ -138,9 +138,9 @@ def clean_pose_data(cleaned_time, pose_landmarks_list, frame_rate):
     for t in cleaned_time:
         frame_index = int(t // frame_duration_ms)
         if frame_index < len(pose_landmarks_list):
-            cleaned_pose_landmarks.append(pose_landmarks_list[frame_index])
+            aligned_pose_landmarks.append(pose_landmarks_list[frame_index])
 
-    return cleaned_pose_landmarks
+    return aligned_pose_landmarks
 
 
 def get_mediapipe_pose_estimation_for_frames(cleaned_time, input_file_path, output_path=None, output_video=False, output_json=False):
@@ -166,7 +166,7 @@ def get_mediapipe_pose_estimation_for_frames(cleaned_time, input_file_path, outp
 
     # Clean pose data based on cleaned audio data
     frame_rate = 25  # frames per second -- based on frame rate from shotcut output videos
-    cleaned_pose_landmarks = clean_pose_data(cleaned_time, pose_landmarks_list, frame_rate)
+    cleaned_pose_landmarks = align_pose_data(cleaned_time, pose_landmarks_list, frame_rate)
 
     if output_json:
         with open(output_json_path, 'w') as json_file:
@@ -233,7 +233,7 @@ def get_dlib_face_landmarks(input_video_path, output_video_path=None, output_vid
     return face_landmarks_list
 
 
-def clean_face_landmarks(cleaned_time, face_landmarks_list, frame_rate):
+def align_face_landmarks(cleaned_time, face_landmarks_list, frame_rate):
     """
     Cleans the face data by keeping only the segments that correspond to the cleaned audio segments.
 
@@ -243,9 +243,9 @@ def clean_face_landmarks(cleaned_time, face_landmarks_list, frame_rate):
         frame_rate (int): The frame rate of the video.
 
     Returns:
-        cleaned_face_landmarks (list): The cleaned list of face landmarks.
+        aligned_face_landmarks (list): The list of face landmarks aligned with audio frames.
     """
-    cleaned_face_landmarks = []
+    aligned_face_landmarks = []
     frame_duration_ms = 1000 / frame_rate
 
     # Ensure cleaned_time is in milliseconds
@@ -256,9 +256,9 @@ def clean_face_landmarks(cleaned_time, face_landmarks_list, frame_rate):
     for t in cleaned_time:
         frame_index = int(t // frame_duration_ms)
         if frame_index < len(face_landmarks_list):
-            cleaned_face_landmarks.append(face_landmarks_list[frame_index])
+            aligned_face_landmarks.append(face_landmarks_list[frame_index])
 
-    return cleaned_face_landmarks
+    return aligned_face_landmarks
 
 
 
@@ -286,7 +286,7 @@ def get_dlib_face_estimation_for_frames(cleaned_time, input_file_path, output_pa
 
     # Clean face data based on cleaned audio data
     frame_rate = 25  # frames per second
-    cleaned_face_landmarks = clean_face_landmarks(cleaned_time, face_landmarks_list, frame_rate)
+    cleaned_face_landmarks = align_face_landmarks(cleaned_time, face_landmarks_list, frame_rate)
 
     if output_json:
         with open(output_json_path, 'w') as json_file:
