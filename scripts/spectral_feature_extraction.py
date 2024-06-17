@@ -112,14 +112,14 @@ def spec_slope(spectrum_frames):
     spec_slopes = []
 
     for spectrum in spectrum_frames:
-        # Compute log-power spectrum
-        log_power_spectrum = np.log(np.abs(spectrum) ** 2 + 1e-6)  # Add a small value to avoid log(0)
+        # Compute log spectrum
+        log_spectrum = np.log(np.abs(spectrum) ** 2 + 1e-6)  # Add a small value to avoid log(0)
 
         # Compute frequency axis
         freq_axis = np.arange(len(spectrum))
 
         # Perform linear regression
-        slope, _, _, _, _ = linregress(freq_axis, log_power_spectrum)
+        slope, _, _, _, _ = linregress(freq_axis, log_spectrum)
 
         spec_slopes.append(slope)
 
