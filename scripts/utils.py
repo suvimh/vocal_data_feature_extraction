@@ -23,19 +23,20 @@ def load_audio(audio_path):
     return audio, loader.paramValue('sampleRate')
 
 
-def frame_generator(audio, sample_rate):
+def frame_generator(audio, sample_rate, frame_duration_ms=10):
     """
     Generate 10ms frames from an audio signal.
 
     Args:
         audio (np.ndarray): The audio signal.
         sample_rate (int): The sample rate of the audio signal.
+        frame_duration_ms (int): The size of each frame in milliseconds.
 
     Returns:
         es.FrameGenerator: The frame generator object.
     """
-    window_duration_ms = 10
-    frame_size = int(sample_rate * (window_duration_ms / 1000.0))
+
+    frame_size = int(sample_rate * (frame_duration_ms / 1000.0))
 
     # Ensure frame size is even for FFT
     if frame_size % 2 != 0:

@@ -142,30 +142,22 @@ def get_recording_condition(file_path):
         raise PathLengthError("Path is too short to extract the desired folder.")
 
 
-# def get_audio_source(file_path):
-#     """
-#     Determines the audio source based on the file path.
+def get_sex(name, metadata=METADATA):
+    """
+    Determines the participant sex based on the file path.
 
-#     Args:
-#         file_path (str): The path of the audio file.
+    Args:
+        file_path (str): The path of the audio file.
 
-#     Returns:
-#         str: The audio source ('computer', 'phone', 'mic').
-
-#     Raises:
-#         AudioSourceError: If the audio source cannot be identified.
-#     """
-#     path_parts = file_path.split(os.sep)
-
-#     file_name = path_parts[-1]
-#     if 'computer' in file_name:
-#         return 'computer'
-#     elif 'phone' in file_name:
-#         return 'phone'
-#     elif 'mic' in file_name:
-#         return 'mic'
-#     else:
-#         raise AudioSourceError("Cannot identify audio source.")
+    Returns:
+        str: Sex of the participant.
+    """
+    with open(metadata, 'r') as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            if row['Sex'].strip().lower() == name.strip().lower():
+                return row['Participant number']
+    return None
 
 
 def get_phrase(file_path):
@@ -233,11 +225,11 @@ def extract_metadata(file_path):
 
     file_info = {
         'participant_number' : get_participant_number(name),
+        'sex' : get_sex(name),
         'age' : get_age(name),
         'experience_level' : get_experience_level(name),
         'phonation' : get_phonation(file_path),
         'recording_condition' : get_recording_condition(file_path),
-        # 'audio_source' : get_audio_source(file_path),
         'phrase' : get_phrase(file_path),
         'clip_number' : get_clip_number(file_path)
     }

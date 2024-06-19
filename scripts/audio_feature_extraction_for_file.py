@@ -39,7 +39,7 @@ def rms_energy(frames):
     return [rms(frame) for frame in frames]
 
 
-def extract_audio_features_for_frames(audio_filepath, reference_audio=True, cleaned_time=None):
+def extract_audio_features_for_frames(audio_filepath, reference_audio=True, cleaned_time=None, frame_duration_ms=10):
     """
     Extracts various audio features for each frame of the given audio file.
 
@@ -49,6 +49,7 @@ def extract_audio_features_for_frames(audio_filepath, reference_audio=True, clea
                                 (when processing multiple audio sources for same session)
         cleaned_time (list): The cleaned time stamps corresponding to the extracted features from 
                              reference audio. Must be provided if reference_audio is False.
+        frame_duration_ms (int): The size of the frame in milliseconds.
 
     Returns:
         features_for_frames (dict): A dictionary containing the extracted features for each frame.
@@ -72,8 +73,8 @@ def extract_audio_features_for_frames(audio_filepath, reference_audio=True, clea
     """
     audio, fs = load_audio(audio_filepath)
     # pitch extraction using crepe on whole file, followed by sampling and cleaning of the output of crepe
-    time, frequency, confidence, activation = estimate_pitch(audio, fs)
-    sampled_times, sampled_frequencies = sample_pitches(time, frequency)
+    time, frequency, _, _ = estimate_pitch(audio, fs)
+    sampled_times, sampled_frequencies = sample_pitches(time, frequency, frame_duration_ms)
    
     if reference_audio:
         cleaned_time, cleaned_frequencies = clean_sampled_data(
@@ -88,17 +89,18 @@ def extract_audio_features_for_frames(audio_filepath, reference_audio=True, clea
             cleaned_frequencies.append(sampled_frequencies[index])
         cleaned_frequencies = np.array(cleaned_frequencies)
 
-    # splitting full audio into 10ms frames (automatic)
-    frames = list(frame_generator(audio, fs))
-    frame_times = (
-        np.arange(0, len(audio) - 1024 + 1, 441) / fs
-    )  # times at the start of each frame
+    # splitting full audio into frames 
+    frames = list(frame_generator(audio, fs, frame_duration_ms))
+    frame_times = np.arange(0, len(frames)) * (frame_duration_ms / 1000) 
 
-    # Select frames based on cleaned times from crepe algorithm (to remove silence) if the dominant audio file
+     # Select frames based on cleaned times from crepe algorithm (to remove silence)
     cleaned_frames = []
     for t in cleaned_time:
         frame_index = np.argmin(np.abs(frame_times - t))
         cleaned_frames.append(frames[frame_index])
+    
+    if len(cleaned_frames) != len(cleaned_frequencies):
+        raise ValueError("Number of cleaned frames and cleaned frequencies do not match")
 
     rms = es.RMS()
     spectrum = es.Spectrum()

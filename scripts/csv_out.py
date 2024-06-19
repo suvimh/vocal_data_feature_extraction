@@ -38,6 +38,7 @@ def write_features_to_csv(output_file, metadata, features_for_audio_sources, fea
 def write_metadata(metadata, frame):
     return [
         metadata['participant_number'] if 'participant_number' in metadata else None,
+        metadata['sex'] if 'sex' in metadata else None,
         metadata['age'] if 'age' in metadata else None,
         metadata['experience_level'] if 'experience_level' in metadata else None,
         metadata['phonation'] if 'phonation' in metadata else None,
@@ -55,7 +56,7 @@ def write_audio_features(features_for_audio_sources, frame):
             features['pitches'][frame] if 'pitches' in features else None,
             features['notes'][frame] if 'notes' in features else None,
             features['rms_energies'][frame] if 'rms_energies' in features else None,
-            features['spectrums'][frame] if 'spectrums' in features else None,
+            # features['spectrums'][frame] if 'spectrums' in features else None,
             features['tristimulus'][frame] if 'tristimulus' in features else None,
             features['spec_cents'][frame] if 'spec_cents' in features else None,
             features['spec_spread'][frame] if 'spec_spread' in features else None,
@@ -101,14 +102,13 @@ def construct_csv_header(features_for_audio_sources, features_for_video_sources)
     Returns:
         list: The constructed CSV header.
     """
-    metadata_columns =      ["Participant number", "Age", "Experience level", "Phonation", "Recording Condition",
+    metadata_columns =      ["Participant", "Age", "Sex", "Experience level", "Phonation", "Recording Condition",
                             "Phrase", "Clip Number", "Frame"]
-    audio_feature_columns = ["Pitch", "Note", "RMS Energy", "Spectrum", "Tristimulus",
-                            "Spectral Centroid", "Spectral Spread", "Spectral Skewness", "Spectral Kurtosis",
-                            "Spectral Slope", "Spectral Decrease", "Spectral Rolloff", "Spectral Flatness",
-                            "Spectral Crest", "MFCC FB40"]
+    audio_feature_columns = ["Pitch", "Note", "RMS Energy",  "Tristimulus", "Spec Centroid", "Spec Spread", 
+                             "Spec Skewness", "Spec Kurtosis", "Spec Slope", "Spec Decrease", "Spec Rolloff", 
+                             "Spec Flatness", "Spec Crest", "MFCC FB40"]
     video_feature_columns = ["Pose Landmarks", "Face Landmarks"]
-    biosignal_columns =     ["Respiration", "EMG", "EEG_1", "EEG_2"]
+    biosignal_columns =     ["PZT", "EMG", "EEG_1", "EEG_2"]
 
     # create full CSV header
     header = metadata_columns.copy()

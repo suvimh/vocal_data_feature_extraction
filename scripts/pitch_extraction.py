@@ -98,20 +98,21 @@ def plot_pitch(time, frequency, confidence, activation, sampled_time, sampled_fr
     plt.show()
 
 
-def sample_pitches(time, frequency, sample_interval=0.01):
+def sample_pitches(time, frequency, frame_duration_ms=10):
     """
     Sample the pitch values at regular intervals by taking the value at the midpoint of each window.
 
     Args:
         time (array-like): The time data.
         frequency (array-like): The frequency data.
-        sample_interval (float, optional): The desired interval between samples in seconds. Default is 0.01 (10 ms).
+        frame_duration_ms (int): The duration of each frame in milliseconds.
 
     Returns:
         sampled_time (ndarray): The sampled time data.
         sampled_frequency (ndarray): The sampled frequency data.
     """
     total_duration = time[-1]
+    sample_interval = frame_duration_ms / 1000
     num_samples = int(total_duration / sample_interval) + 1
 
     sampled_time = np.linspace(0, total_duration, num_samples)
