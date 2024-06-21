@@ -44,6 +44,7 @@ def process_data_folder(data_directory, csv_out, processed_folders_file, num_fol
         for root, dirs, _ in os.walk(data_directory):
             if not dirs:  # Check if there are no subdirectories -- means we are at the last level
                 if root in processed_folders:
+                    pbar.update(1)
                     continue  # Skip already processed folders
 
                 process_folder(root, csv_out, processed_folders_file, processed_folders, frame_duration_ms)

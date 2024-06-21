@@ -155,8 +155,8 @@ def get_sex(name, metadata=METADATA):
     with open(metadata, 'r') as file:
         reader = csv.DictReader(file)
         for row in reader:
-            if row['Sex'].strip().lower() == name.strip().lower():
-                return row['Participant number']
+            if row['Name'].strip().lower() == name.strip().lower():
+                return row['Sex']
     return None
 
 

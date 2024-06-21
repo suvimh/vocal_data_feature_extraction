@@ -102,7 +102,7 @@ def construct_csv_header(features_for_audio_sources, features_for_video_sources)
     Returns:
         list: The constructed CSV header.
     """
-    metadata_columns =      ["Participant", "Age", "Sex", "Experience level", "Phonation", "Recording Condition",
+    metadata_columns =      ["Participant", "Sex", "Age", "Experience level", "Phonation", "Recording Condition",
                             "Phrase", "Clip Number", "Frame"]
     audio_feature_columns = ["Pitch", "Note", "RMS Energy",  "Tristimulus", "Spec Centroid", "Spec Spread", 
                              "Spec Skewness", "Spec Kurtosis", "Spec Slope", "Spec Decrease", "Spec Rolloff", 
