@@ -2,19 +2,16 @@
   Audio feature extraction of all frames of one file using Essentia.
 """
 
-import numpy as np
 import essentia.standard as es
+import pandas as pd
 import numpy as np
-
-from scripts.spectral_feature_extraction import *
-from scripts.pitch_extraction import *
-from scripts.utils import *
+import scripts.spectral_feature_extraction as spectral
+import scripts.pitch_extraction as pitch
+import scripts.utils as utils
 
 
 def spectrum(frames):
     """
-    Compute the spectrum of each frame in the given list of frames.
-
     Parameters:
         frames (list): A list of audio frames.
 
@@ -30,101 +27,132 @@ def rms_energy(frames):
     Calculate the Root Mean Square (RMS) energy of audio frames.
 
     Parameters:
-        frames (list): A list of audio frames.
+        frames (np.array): A list of audio frames.
 
     Returns:
-        list: A list of RMS energy values for each frame.
+        np.array: An array of RMS energy values for each frame.
     """
     rms = es.RMS()
-    return [rms(frame) for frame in frames]
+    return np.array([rms(frame) for frame in frames], dtype=np.float32)
 
 
-def extract_audio_features_for_frames(audio_filepath, reference_audio=True, cleaned_time=None, frame_duration_ms=10):
+def extract_audio_features_for_frames(audio_filepath, source, reference_audio=True, cleaned_time=None, frame_duration_ms=10):
     """
-    Extracts various audio features for each frame of the given audio file.
-
+    Extracts various audio features for each frame of the given audio file and returns them as a DataFrame.
+    
     Parameters:
-        audio_filepath (str): The path to the audio file.
+        audio_filepath (str): The path to the audio file.
+        source (str): The source of the audio features, used to prefix the column names.
         reference_audio (bool): Whether the audio file is the reference audio file. 
-                                (when processing multiple audio sources for same session)
+                                (when processing multiple audio sources for the same session)
         cleaned_time (list): The cleaned time stamps corresponding to the extracted features from 
                              reference audio. Must be provided if reference_audio is False.
         frame_duration_ms (int): The size of the frame in milliseconds.
-
+    
     Returns:
-        features_for_frames (dict): A dictionary containing the extracted features for each frame.
-          - 'pitches' (list): The cleaned frequencies of the pitches.
-          - 'notes' (list): The musical notes corresponding to the cleaned frequencies.
-          - 'rms_energies' (list): The root mean square (RMS) energies of the frames.
-          - 'spectrums' (list): The spectra of the frames.
-          - 'tristimulus' (list): The tristimulus values calculated from the spectra and cleaned frequencies.
-          - 'spec_cents' (list): The spectral centroids of the frames.
-          - 'spec_spread' (float): The spectral spread of the frames.
-          - 'spec_skew' (float): The spectral skewness of the frames.
-          - 'spec_kurt' (float): The spectral kurtosis of the frames.
-          - 'spec_slope' (float): The spectral slope of the frames.
-          - 'spec_decr' (float): The spectral decrease of the frames.
-          - 'spec_rolloff' (float): The spectral rolloff of the frames.
-          - 'spec_flat' (float): The spectral flatness of the frames.
-          - 'spec_crest' (float): The spectral crest of the frames.
-          - 'mfccFB40' (list): The 40-dimensional Mel-frequency cepstral coefficients
-                              (MFCCs) of the frames.
+        features_df (pd.DataFrame): A DataFrame containing the extracted features for each frame.
         cleaned_time (list): The cleaned time stamps corresponding to the extracted features.
     """
-    audio, fs = load_audio(audio_filepath)
-    # pitch extraction using crepe on whole file, followed by sampling and cleaning of the output of crepe
-    time, frequency, _, _ = estimate_pitch(audio, fs)
-    sampled_times, sampled_frequencies = sample_pitches(time, frequency, frame_duration_ms)
-   
+    audio, fs = utils.load_audio(audio_filepath)
+    cleaned_time, cleaned_frequencies = get_cleaned_time_and_frequencies(audio, fs, reference_audio, cleaned_time, frame_duration_ms)
+
+    frames = utils.frame_generator(audio, fs, frame_duration_ms)
+    cleaned_frames = get_cleaned_frames(frames, cleaned_time, frame_duration_ms)
+    validate_cleaned_data(cleaned_frames, cleaned_frequencies)
+
+    features_data = compute_audio_features(cleaned_frames, cleaned_frequencies, cleaned_time, source, fs)
+
+    features_df = pd.DataFrame(features_data)
+    return features_df, cleaned_time
+
+def get_cleaned_time_and_frequencies(audio, fs, reference_audio, cleaned_time, frame_duration_ms):
+    """
+    Calculate cleaned time and frequencies based on the input audio.
+
+    Args:
+        audio (np.ndarray): The input audio signal.
+        fs (int): The sampling rate of the audio.
+        reference_audio (bool): Flag indicating whether a reference audio is provided.
+        cleaned_time (np.ndarray or None): The cleaned time values. If None, it must be provided when reference_audio is False.
+        frame_duration_ms (float): The duration of each frame in milliseconds.
+
+    Returns:
+        np.ndarray: The cleaned time values.
+        np.ndarray: The cleaned frequencies.
+
+    Raises:
+        ValueError: If cleaned_time is None and reference_audio is False.
+
+    """
+    time, frequency, _, _ = pitch.estimate_pitch(audio, fs)
+    sampled_times, sampled_frequencies = pitch.sample_pitches(time, frequency, frame_duration_ms)
+
     if reference_audio:
-        cleaned_time, cleaned_frequencies = clean_sampled_data(
-            sampled_times, sampled_frequencies
-        )
-    else:  # clean the sampled data to remove silence based on reference audio
+        cleaned_time, cleaned_frequencies = pitch.clean_sampled_data(sampled_times, sampled_frequencies)
+    else:
         if cleaned_time is None:
             raise ValueError("cleaned_time must be provided when reference_audio is False")
-        cleaned_frequencies = []
-        for t in cleaned_time:
-            index = np.abs(sampled_times - t).argmin()
-            cleaned_frequencies.append(sampled_frequencies[index])
-        cleaned_frequencies = np.array(cleaned_frequencies)
-
-    # splitting full audio into frames 
-    frames = list(frame_generator(audio, fs, frame_duration_ms))
-    frame_times = np.arange(0, len(frames)) * (frame_duration_ms / 1000) 
-
-     # Select frames based on cleaned times from crepe algorithm (to remove silence)
-    cleaned_frames = []
-    for t in cleaned_time:
-        frame_index = np.argmin(np.abs(frame_times - t))
-        cleaned_frames.append(frames[frame_index])
+        cleaned_frequencies = [sampled_frequencies[np.abs(sampled_times - t).argmin()] for t in cleaned_time]
     
+    return np.array(cleaned_time), np.array(cleaned_frequencies)
+
+def get_cleaned_frames(frames, cleaned_time, frame_duration_ms):
+    frame_times = np.arange(0, len(frames)) * (frame_duration_ms / 1000)
+    cleaned_frames = [frames[np.argmin(np.abs(frame_times - t))] for t in cleaned_time]
+    return cleaned_frames
+
+def validate_cleaned_data(cleaned_frames, cleaned_frequencies):
     if len(cleaned_frames) != len(cleaned_frequencies):
         raise ValueError("Number of cleaned frames and cleaned frequencies do not match")
 
-    rms = es.RMS()
-    spectrum = es.Spectrum()
-    rms_frames = [rms(frame) for frame in cleaned_frames]
-    spectrum_frames = [spectrum(frame) for frame in cleaned_frames]
+def compute_audio_features(cleaned_frames, cleaned_frequencies, cleaned_time, source, fs):
+    """
+    Compute audio features for a given audio file.
 
-    spec_spread, spec_skew, spec_kurt = distribution_shape(spectrum_frames)
+    Args:
+        cleaned_frames (list): List of cleaned audio frames.
+        cleaned_frequencies (list): List of cleaned frequencies.
+        cleaned_time (list): List of cleaned time values.
+        source (str): Source identifier for the audio file.
+        fs (int): Sampling rate of the audio file.
 
-    features_for_frames = {
-        "pitches": cleaned_frequencies,
-        "notes": [get_note_for_frequency(freq) for freq in cleaned_frequencies],
-        "rms_energies": rms_frames,
-        "spectrums": spectrum_frames,
-        "tristimulus": tristimulus(spectrum_frames, cleaned_frequencies),
-        "spec_cents": spec_cent(spectrum_frames, fs),
-        "spec_spread": spec_spread,
-        "spec_skew": spec_skew,
-        "spec_kurt": spec_kurt,
-        "spec_slope": spec_slope(spectrum_frames),
-        "spec_decr": spec_decr(spectrum_frames, fs),
-        "spec_rolloff": spec_rolloff(spectrum_frames, fs),
-        "spec_flat": spec_flat(spectrum_frames),
-        "spec_crest": spec_crest(spectrum_frames),
-        "mfccFB40": mfcc_fb40(spectrum_frames, fs),
+    Returns:
+        dict: Dictionary containing computed audio features.
+
+    Raises:
+        ValueError: If the lengths of the feature lists are not equal.
+    """
+
+    spectrum_frames = spectrum(cleaned_frames)
+    spec_spread, spec_skew, spec_kurt = spectral.distribution_shape(spectrum_frames)
+    tristimulus1, tristimulus2, tristimulus3 = spectral.tristimulus(spectrum_frames, cleaned_frequencies)
+    mfcc_values = spectral.mfcc_fb40(spectrum_frames, fs)
+
+    features_data = {
+        f"{source}_pitch": np.array(cleaned_frequencies, dtype=np.float32),
+        f"{source}_note": [pitch.get_note_for_frequency(freq) for freq in cleaned_frequencies],
+        f"{source}_rms_energy": rms_energy(cleaned_frames),
+        f"{source}_spec_cent": spectral.spec_cent(spectrum_frames, fs),
+        f"{source}_spec_spread": spec_spread,
+        f"{source}_spec_skew": spec_skew,
+        f"{source}_spec_kurt": spec_kurt,
+        f"{source}_spec_slope": spectral.spec_slope(spectrum_frames),
+        f"{source}_spec_decr": spectral.spec_decr(spectrum_frames, fs),
+        f"{source}_spec_rolloff": spectral.spec_rolloff(spectrum_frames, fs),
+        f"{source}_spec_flat": spectral.spec_flat(spectrum_frames),
+        f"{source}_spec_crest": spectral.spec_crest(spectrum_frames),
+        f"{source}_tristimulus1": tristimulus1,
+        f"{source}_tristimulus2": tristimulus2,
+        f"{source}_tristimulus3": tristimulus3
     }
 
-    return features_for_frames, cleaned_time
+    # Add MFCC coefficients
+    for i in range(len(mfcc_values)):
+        features_data[f"{source}_mfcc_{i+1}"] = mfcc_values[i]
+
+    # Ensure all feature lists have the same length
+    lengths = [len(v) for v in features_data.values()]
+    if len(set(lengths)) != 1:
+        raise ValueError("All features must have the same number of rows")
+
+    return features_data

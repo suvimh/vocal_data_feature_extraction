@@ -164,11 +164,11 @@ def get_mediapipe_pose_estimation_for_frames(cleaned_time, input_file_path, outp
     # Clean pose data based on cleaned audio data
     frame_rate = 25  # frames per second -- based on frame rate from shotcut output videos
     cleaned_pose_landmarks = align_landmarks(cleaned_time, pose_landmarks_list, frame_rate)
-
+    #output json file with landmarks
     if output_json:
         with open(output_json_path, 'w') as json_file:
             json.dump({'pose_landmarks': cleaned_pose_landmarks}, json_file)
-
+    #output video file with landmarks on it
     if output_video or output_json:
         logging.info(f'Pose landmark locations saved to: {output_json_path}')
         logging.info(f'Video with landmarks saved to: {output_video_path}')
