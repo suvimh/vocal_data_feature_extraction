@@ -10,40 +10,52 @@ import cv2
 import dlib
 import mediapipe as mp
 from tqdm.auto import tqdm
-import numpy as np
-
+import pandas as pd
 
 # Set up logging configuration
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 PROTO_PATH = "data/shape_predictor_68_face_landmarks.dat"
 
 
-def get_face_pose_output_paths(input_file_path, output_path, landmark_type):
-    '''
-    Returns the output paths for the video file with landmarks and the JSON file with landmark locations.
+def get_mediapipe_pose_estimation_for_frames(cleaned_time, input_file_path, output_path=None, source='undef', output_video=False, output_json=False):
+    """
+    Process mediapipe pose estimation for frames.
 
-    Parameters:
-    - input_file_path (str): The path of the input video file.
-    - output_path (str): The path where the output files will be saved.
-    - landmark_type (str): The type of landmarks to be extracted. Can be either 'face' for dlib face landmarks file or 'pose' for mediapipe pose estimation.
+    Args:
+        cleaned_time (float): The cleaned audio time.
+        input_file_path (str): The path to the input file.
+        output_path (str, optional): The path to the output directory.
+        source (str, optional): The source of the landmarks. Defaults to 'undef'.
+        output_video (bool, optional): Whether to output a video with landmarks. Defaults to False.
+        output_json (bool, optional): Whether to output a JSON file with pose landmarks. Defaults to False.
 
     Returns:
-    - output_video_path (str): The path of the output video file with landmarks.
-    - output_json_path (str): The path of the output JSON file with landmark locations.
-    '''
-    input_filename = os.path.basename(input_file_path)
+        list: The cleaned pose landmarks.
+    """
+    logging.info(f"Processing mediapipe pose estimation for {input_file_path}.")
 
-    output_video_name = re.sub(r'(?i)\.mp4$', '', input_filename) + f'_with_{landmark_type}_landmarks.mp4'
-    output_video_path = os.path.join(output_path, output_video_name)
-    os.makedirs(os.path.dirname(output_video_path), exist_ok=True)
+    if output_video or output_json:
+        output_video_path, output_json_path = get_face_pose_output_paths(input_file_path, output_path, landmark_type='mp_pose')
 
-    output_json_name = re.sub(r'(?i)\.mp4$', '', input_filename) + f'_{landmark_type}_landmark_locations.json'
-    output_json_path = os.path.join(output_path, output_json_name)
-    os.makedirs(os.path.dirname(output_json_path), exist_ok=True)
+    pose_landmarks_list = get_mediapipe_landmarks(input_file_path, output_video)
 
-    return output_video_path, output_json_path
+    # Clean pose data based on cleaned audio data
+    frame_rate = 25  # frames per second -- based on frame rate from shotcut output videos
+    reshaped_pose_landmarks = reshape_pose_landmarks_dataframe(pose_landmarks_list, source)
+    cleaned_pose_landmarks = align_landmarks(cleaned_time, reshaped_pose_landmarks, frame_rate)
+    
+    #output json file with landmarks
+    if output_json:
+        with open(output_json_path, 'w') as json_file:
+            json.dump({'pose_landmarks': cleaned_pose_landmarks}, json_file)
+        logging.info(f'Pose landmark locations saved to: {output_json_path}')
+    #output video file with landmarks on it
+    if output_video:
+        logging.info(f'Video with landmarks saved to: {output_video_path}')
+
+    return cleaned_pose_landmarks
 
 
 def get_mediapipe_landmarks(input_video_path, output_video_path=None, output_video=False):
@@ -56,7 +68,8 @@ def get_mediapipe_landmarks(input_video_path, output_video_path=None, output_vid
         output_video (bool, optional): Whether to save the output video. Defaults to False.
 
     Returns:
-        list: A list of dictionaries containing the x, y, and z coordinates of the detected landmarks for each frame.
+        np.ndarray: A numpy array of shape (num_frames, num_landmarks, 3) containing the x, y, and z coordinates
+                    of the detected landmarks for each frame. The array is of type float32.
     """
     cap = cv2.VideoCapture(input_video_path)
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
@@ -112,68 +125,71 @@ def get_mediapipe_landmarks(input_video_path, output_video_path=None, output_vid
             out.release()
         cv2.destroyAllWindows()
 
-    return pose_landmarks_list
+    return pd.DataFrame(pose_landmarks_list)
 
 
-def align_landmarks(cleaned_time, landmarks_list, frame_rate):
+def reshape_pose_landmarks_dataframe(landmark_df, source):
     """
-    Cleans face/popse data by keeping only the segments that correspond to the cleaned audio segments.
+    Reshape the DataFrame containing landmark data from MediaPipe.
 
     Args:
-        cleaned_time (ndarray): The cleaned time data.
-        landmarks_list (list): The list of face or pose landmarks for each frame.
-        frame_rate (int): The frame rate of the video.
+        df (pd.DataFrame): DataFrame containing landmark data from MediaPipe.
 
     Returns:
-        aligned_landmarks (list): The list of face or pose landmarks aligned with audio frames.
+        pd.DataFrame: Reshaped DataFrame with columns Pose_Landmark_{landmark_index}_{coordinate}.
     """
-    aligned_landmarks = []
-    video_frame_duration_ms = 1000 / frame_rate
+    reshaped_df = pd.DataFrame()
 
-    # Convert cleaned_time from seconds to milliseconds
-    cleaned_time = np.array(cleaned_time) * 1000 
-    # Iterate over cleaned_time and find corresponding frame indices
-    for t in cleaned_time:
-        frame_index = int(t // video_frame_duration_ms)
-        if frame_index < len(landmarks_list):
-            aligned_landmarks.append(landmarks_list[frame_index])
+    for landmark, data in landmark_df.items():
+        for idx, value in data.items():
+            if pd.notna(value):
+                for coord in ['x', 'y', 'z']:  # Assuming keys are 'x', 'y', 'z'
+                    new_col_name = f"{source}_pose_landmark_{landmark+1}_{coord}"
+                    if coord in value:  # Check if coordinate exists in the value dictionary
+                        reshaped_df.loc[idx, new_col_name] = value[coord]
+                    else:
+                        reshaped_df.loc[idx, new_col_name] = None  # Handle missing coordinates
 
-    return aligned_landmarks
+    return reshaped_df
 
-def get_mediapipe_pose_estimation_for_frames(cleaned_time, input_file_path, output_path=None, output_video=False, output_json=False):
+
+def get_dlib_face_estimation_for_frames(cleaned_time, input_file_path, output_path=None, source='undef', output_video=False, output_json=False):
     """
-    Process mediapipe pose estimation for frames.
+    Process dlib face landmarks for frames in a video.
 
     Args:
-        cleaned_time (float): The cleaned audio time.
-        input_file_path (str): The path to the input file.
-        output_path (str): The path to the output directory.
-        output_video (bool, optional): Whether to output a video with landmarks. Defaults to False.
-        output_json (bool, optional): Whether to output a JSON file with pose landmarks. Defaults to False.
+        cleaned_time (float): The cleaned time in seconds.
+        input_file_path (str): The path to the input video file.
+        output_path (str, optional): The path to the output directory.
+        source (str, optional): The source of the landmarks. Defaults to 'undef'.
+        output_video (bool, optional): Whether to save the video with landmarks. Defaults to False.
+        output_json (bool, optional): Whether to save the face landmarks as JSON. Defaults to False.
 
     Returns:
-        list: The cleaned pose landmarks.
+        list: The cleaned face landmarks.
     """
-    logging.info(f"Processing mediapipe pose estimation for {input_file_path}.")
+    logging.info(f"Processing dlib face landmarks for {input_file_path}.")
 
+    output_video_path, output_json_path = None, None
     if output_video or output_json:
-        output_video_path, output_json_path = get_face_pose_output_paths(input_file_path, output_path, landmark_type='mp_pose')
+        output_video_path, output_json_path = get_face_pose_output_paths(input_file_path, output_path, landmark_type='dlib_face')
 
-    pose_landmarks_list = get_mediapipe_landmarks(input_file_path, output_video)
+    face_landmarks_list = get_dlib_face_landmarks(input_file_path, output_video_path, output_video)
+    reshaped_face_landmarks = reshape_face_landmarks_dataframe(face_landmarks_list, source)
 
-    # Clean pose data based on cleaned audio data
-    frame_rate = 25  # frames per second -- based on frame rate from shotcut output videos
-    cleaned_pose_landmarks = align_landmarks(cleaned_time, pose_landmarks_list, frame_rate)
+    # Clean face data based on cleaned audio data
+    frame_rate = 25  # frames per second
+    cleaned_face_landmarks = align_landmarks(cleaned_time, reshaped_face_landmarks, frame_rate)
 
     if output_json:
         with open(output_json_path, 'w') as json_file:
-            json.dump({'pose_landmarks': cleaned_pose_landmarks}, json_file)
+            json.dump({'face_landmarks': cleaned_face_landmarks}, json_file)
+        logging.info(f'Face landmark locations saved to: {output_json_path}')
 
-    if output_video or output_json:
-        logging.info(f'Pose landmark locations saved to: {output_json_path}')
+    if output_video:
         logging.info(f'Video with landmarks saved to: {output_video_path}')
 
-    return cleaned_pose_landmarks
+    return cleaned_face_landmarks
 
 
 def get_dlib_face_landmarks(input_video_path, output_video_path=None, output_video=False):
@@ -186,7 +202,7 @@ def get_dlib_face_landmarks(input_video_path, output_video_path=None, output_vid
         output_video (bool, optional): Whether to save the output video file. Defaults to False.
 
     Returns:
-        list: A list of facial landmarks for each frame in the video. Each facial landmark is represented as a list of [x, y, None].
+        pd.DataFrame: DataFrame containing facial landmarks for each frame.
     """
     detector = dlib.get_frontal_face_detector()
     predictor = dlib.shape_predictor(PROTO_PATH)  # Path to the dlib model
@@ -227,41 +243,86 @@ def get_dlib_face_landmarks(input_video_path, output_video_path=None, output_vid
         out.release()
     cv2.destroyAllWindows()
 
-    return face_landmarks_list
+    return pd.DataFrame(face_landmarks_list)
 
 
-def get_dlib_face_estimation_for_frames(cleaned_time, input_file_path, output_path=None, output_video=False, output_json=False):
+def reshape_face_landmarks_dataframe(landmarks_df, source):
     """
-    Process dlib face landmarks for frames in a video.
+    Reshape the DataFrame containing face landmark data.
 
     Args:
-        cleaned_time (float): The cleaned time in seconds.
-        input_file_path (str): The path to the input video file.
-        output_path (str): The path to the output directory.
-        output_video (bool, optional): Whether to save the video with landmarks. Defaults to False.
-        output_json (bool, optional): Whether to save the face landmarks as JSON. Defaults to False.
+        landmarks_df (pd.DataFrame): DataFrame containing face landmark data.
+        source (str): Source identifier for the landmarks (e.g., 'mediapipe').
 
     Returns:
-        list: The cleaned face landmarks.
+        pd.DataFrame: Reshaped DataFrame with columns Face_Landmark_{landmark_index}_{coordinate}.
     """
-    logging.info(f"Processing dlib face landmarks for {input_file_path}.")
+    reshaped_df = pd.DataFrame()
 
-    output_video_path, output_json_path = None, None
-    if output_video or output_json:
-        output_video_path, output_json_path = get_face_pose_output_paths(input_file_path, output_path, landmark_type='dlib_face')
+    coordinates = ["x", "y", "z"]
 
-    face_landmarks_list = get_dlib_face_landmarks(input_file_path, output_video_path, output_video)
+    for column_name, column_data in landmarks_df.items():
+        for idx, value in enumerate(column_data):
+            if value is not None:  # Check if the value is not None
+                x, y, z = value  # Extract x, y, z from the list [x, y, z]
+                for coord_idx, coord in enumerate(coordinates):
+                    new_col_name = f"{source}_face_landmark_{column_name+1}_{coord}"
+                    reshaped_df.loc[idx, new_col_name] = locals()[coord]  # Use locals() to access x, y, z by string
 
-    # Clean face data based on cleaned audio data
-    frame_rate = 25  # frames per second
-    cleaned_face_landmarks = align_landmarks(cleaned_time, face_landmarks_list, frame_rate)
+    return reshaped_df
 
-    if output_json:
-        with open(output_json_path, 'w') as json_file:
-            json.dump({'face_landmarks': cleaned_face_landmarks}, json_file)
 
-    if output_video or output_json:
-        logging.info(f'Face landmark locations saved to: {output_json_path}')
-        logging.info(f'Video with landmarks saved to: {output_video_path}')
+def align_landmarks(cleaned_time, landmarks_df, frame_rate):
+    """
+    Cleans face/pose data by keeping only the segments that correspond to the cleaned audio segments.
 
-    return cleaned_face_landmarks
+    Args:
+        cleaned_time (ndarray): The cleaned time data.
+        landmarks_df (DataFrame): The DataFrame of face or pose landmarks.
+        frame_rate (int): The frame rate of the video.
+
+    Returns:
+        DataFrame: The DataFrame of face or pose landmarks aligned with audio frames.
+    """
+    aligned_landmarks = []
+    video_frame_duration_ms = 1000 / frame_rate
+
+    # Convert cleaned_time from seconds to milliseconds
+    cleaned_time_ms = cleaned_time * 1000
+
+    # Iterate over cleaned_time and find corresponding frame indices
+    for t in cleaned_time_ms:
+        frame_index = int(t // video_frame_duration_ms)
+        if frame_index < len(landmarks_df):
+            aligned_landmarks.append(landmarks_df.iloc[frame_index])
+
+    # Concatenate the aligned landmarks into a single DataFrame
+    aligned_df = pd.concat(aligned_landmarks, axis=1).T.reset_index(drop=True)
+
+    return aligned_df
+
+
+def get_face_pose_output_paths(input_file_path, output_path, landmark_type):
+    '''
+    Returns the output paths for the video file with landmarks and the JSON file with landmark locations.
+
+    Parameters:
+    - input_file_path (str): The path of the input video file.
+    - output_path (str): The path where the output files will be saved.
+    - landmark_type (str): The type of landmarks to be extracted. Can be either 'face' for dlib face landmarks file or 'pose' for mediapipe pose estimation.
+
+    Returns:
+    - output_video_path (str): The path of the output video file with landmarks.
+    - output_json_path (str): The path of the output JSON file with landmark locations.
+    '''
+    input_filename = os.path.basename(input_file_path)
+
+    output_video_name = re.sub(r'(?i)\.mp4$', '', input_filename) + f'_with_{landmark_type}_landmarks.mp4'
+    output_video_path = os.path.join(output_path, output_video_name)
+    os.makedirs(os.path.dirname(output_video_path), exist_ok=True)
+
+    output_json_name = re.sub(r'(?i)\.mp4$', '', input_filename) + f'_{landmark_type}_landmark_locations.json'
+    output_json_path = os.path.join(output_path, output_json_name)
+    os.makedirs(os.path.dirname(output_json_path), exist_ok=True)
+
+    return output_video_path, output_json_path

@@ -4,6 +4,9 @@
 # Ignore metadata for privacy
 metadata.csv
 
+# Ignore other (test) data files
+*.csv
+
 # Ignore OS-specific files
 .DS_Store
 

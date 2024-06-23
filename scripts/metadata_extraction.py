@@ -5,6 +5,7 @@
 
 import os
 import csv 
+import pandas as pd
 
 
 METADATA = "data/metadata.csv"
@@ -234,4 +235,6 @@ def extract_metadata(file_path):
         'clip_number' : get_clip_number(file_path)
     }
 
-    return file_info
+    file_info_df = pd.DataFrame([file_info])
+
+    return file_info_df
