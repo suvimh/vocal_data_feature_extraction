@@ -4,11 +4,8 @@
 # Ignore metadata for privacy
 metadata.csv
 
-# Ignore data files
-transformed_data.csv
-output_test.csv
-clean_out_test.csv
-real_out_test.csv
+# Ignore other (test) data files
+*.csv
 
 # Ignore OS-specific files
 .DS_Store

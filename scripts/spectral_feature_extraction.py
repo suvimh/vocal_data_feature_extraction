@@ -14,10 +14,11 @@ def spectral_peaks(spectrum_frames):
     spectrum_frames (list): A list of spectrum frames.
 
     Returns:
-    np.array: A array of spectral peaks for each frame in the spectrum frames.
+    list: A list of spectral peaks for each frame in the spectrum frames.
+          Not changing the return type to np.ndarray to avoid issues with Essentia data types.
     """
     spectral_peaks = es.SpectralPeaks()
-    return np.array([spectral_peaks(frame) for frame in spectrum_frames])
+    return [spectral_peaks(frame) for frame in spectrum_frames]
 
 
 def tristimulus(spectrum_frames, cleaned_frequencies):

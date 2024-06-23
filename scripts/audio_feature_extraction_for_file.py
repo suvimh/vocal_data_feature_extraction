@@ -10,6 +10,34 @@ import scripts.pitch_extraction as pitch
 import scripts.utils as utils
 
 
+def extract_audio_features_for_frames(audio_filepath, source, reference_audio=True, cleaned_time=None, frame_duration_ms=10):
+    """
+    Extracts various audio features for each frame of the given audio file and returns them as a DataFrame.
+    
+    Parameters:
+        audio_filepath (str): The path to the audio file.
+        source (str): The source of the audio features, used to prefix the column names.
+        reference_audio (bool): Whether the audio file is the reference audio file. 
+                                (when processing multiple audio sources for the same session)
+        cleaned_time (list): The cleaned time stamps corresponding to the extracted features from 
+                             reference audio. Must be provided if reference_audio is False.
+        frame_duration_ms (int): The size of the frame in milliseconds.
+    
+    Returns:
+        features_df (pd.DataFrame): A DataFrame containing the extracted features for each frame.
+        cleaned_time (list): The cleaned time stamps corresponding to the extracted features.
+    """
+    audio, fs = utils.load_audio(audio_filepath)
+    cleaned_time, cleaned_frequencies = get_cleaned_time_and_frequencies(audio, fs, reference_audio, cleaned_time, frame_duration_ms)
+
+    frames = list(utils.frame_generator(audio, fs, frame_duration_ms))
+    cleaned_frames = get_cleaned_frames(frames, cleaned_time, cleaned_frequencies, frame_duration_ms)
+
+    features_data = compute_audio_features(cleaned_frames, cleaned_frequencies, source, fs)
+    features_df = pd.DataFrame(features_data)
+    return features_df, cleaned_time
+
+
 def spectrum(frames):
     """
     Parameters:
@@ -35,35 +63,6 @@ def rms_energy(frames):
     rms = es.RMS()
     return np.array([rms(frame) for frame in frames], dtype=np.float32)
 
-
-def extract_audio_features_for_frames(audio_filepath, source, reference_audio=True, cleaned_time=None, frame_duration_ms=10):
-    """
-    Extracts various audio features for each frame of the given audio file and returns them as a DataFrame.
-    
-    Parameters:
-        audio_filepath (str): The path to the audio file.
-        source (str): The source of the audio features, used to prefix the column names.
-        reference_audio (bool): Whether the audio file is the reference audio file. 
-                                (when processing multiple audio sources for the same session)
-        cleaned_time (list): The cleaned time stamps corresponding to the extracted features from 
-                             reference audio. Must be provided if reference_audio is False.
-        frame_duration_ms (int): The size of the frame in milliseconds.
-    
-    Returns:
-        features_df (pd.DataFrame): A DataFrame containing the extracted features for each frame.
-        cleaned_time (list): The cleaned time stamps corresponding to the extracted features.
-    """
-    audio, fs = utils.load_audio(audio_filepath)
-    cleaned_time, cleaned_frequencies = get_cleaned_time_and_frequencies(audio, fs, reference_audio, cleaned_time, frame_duration_ms)
-
-    frames = utils.frame_generator(audio, fs, frame_duration_ms)
-    cleaned_frames = get_cleaned_frames(frames, cleaned_time, frame_duration_ms)
-    validate_cleaned_data(cleaned_frames, cleaned_frequencies)
-
-    features_data = compute_audio_features(cleaned_frames, cleaned_frequencies, cleaned_time, source, fs)
-
-    features_df = pd.DataFrame(features_data)
-    return features_df, cleaned_time
 
 def get_cleaned_time_and_frequencies(audio, fs, reference_audio, cleaned_time, frame_duration_ms):
     """
@@ -96,23 +95,30 @@ def get_cleaned_time_and_frequencies(audio, fs, reference_audio, cleaned_time, f
     
     return np.array(cleaned_time), np.array(cleaned_frequencies)
 
-def get_cleaned_frames(frames, cleaned_time, frame_duration_ms):
-    frame_times = np.arange(0, len(frames)) * (frame_duration_ms / 1000)
-    cleaned_frames = [frames[np.argmin(np.abs(frame_times - t))] for t in cleaned_time]
-    return cleaned_frames
 
-def validate_cleaned_data(cleaned_frames, cleaned_frequencies):
+def get_cleaned_frames(frames, cleaned_time, cleaned_frequencies, frame_duration_ms):
+    if not isinstance(frames, list):
+        print("not a list")
+        frames = list(frames)  # Ensure frames is a list
+    frame_times = np.arange(0, len(frames)) * (frame_duration_ms / 1000) 
+    cleaned_frames = []
+    for t in cleaned_time:
+        frame_index = np.argmin(np.abs(frame_times - t))
+        cleaned_frames.append(frames[frame_index])
+    
     if len(cleaned_frames) != len(cleaned_frequencies):
         raise ValueError("Number of cleaned frames and cleaned frequencies do not match")
+    
+    return cleaned_frames
 
-def compute_audio_features(cleaned_frames, cleaned_frequencies, cleaned_time, source, fs):
+
+def compute_audio_features(cleaned_frames, cleaned_frequencies, source, fs):
     """
     Compute audio features for a given audio file.
 
     Args:
         cleaned_frames (list): List of cleaned audio frames.
         cleaned_frequencies (list): List of cleaned frequencies.
-        cleaned_time (list): List of cleaned time values.
         source (str): Source identifier for the audio file.
         fs (int): Sampling rate of the audio file.
 
@@ -130,7 +136,7 @@ def compute_audio_features(cleaned_frames, cleaned_frequencies, cleaned_time, so
 
     features_data = {
         f"{source}_pitch": np.array(cleaned_frequencies, dtype=np.float32),
-        f"{source}_note": [pitch.get_note_for_frequency(freq) for freq in cleaned_frequencies],
+        f"{source}_note": [utils.get_note_for_frequency(freq) for freq in cleaned_frequencies],
         f"{source}_rms_energy": rms_energy(cleaned_frames),
         f"{source}_spec_cent": spectral.spec_cent(spectrum_frames, fs),
         f"{source}_spec_spread": spec_spread,

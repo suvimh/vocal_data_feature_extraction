@@ -5,6 +5,7 @@
 import os
 import json
 import numpy as np
+import pandas as pd
 
 def get_biosignal_sample_rate(biosignal_data):
     """
@@ -39,7 +40,7 @@ def sample_biosignal_data(file_path, frame_duration_ms=10):
         frame_duration_ms (int, optional): The duration of each frame in milliseconds. Default is 10 ms.
 
     Returns:
-        dict: Dictionary containing sampled biosignal data for each channel.
+        pd.DataFrame: DataFrame containing sampled biosignal data for each channel.
         int: The sampling rate of the biosignal data.
     """
 
@@ -67,7 +68,10 @@ def sample_biosignal_data(file_path, frame_duration_ms=10):
 
             sampled_bio_data[channel_name] = sampled_signal_data
     
-    return sampled_bio_data, sample_rate
+    # Convert sampled_bio_data dictionary to DataFrame
+    biosignal_df = pd.DataFrame(sampled_bio_data)
+    
+    return biosignal_df, sample_rate
 
 
 def clean_biosignal_data(cleaned_time, sampled_bio_data, sample_rate):
@@ -76,38 +80,42 @@ def clean_biosignal_data(cleaned_time, sampled_bio_data, sample_rate):
 
     Args:
         cleaned_time (ndarray): The cleaned time data in seconds.
-        sampled_bio_data (dict): The dictionary containing the sampled biosignal data.
+        sampled_bio_data (pd.DataFrame): The DataFrame containing the sampled biosignal data.
         sample_rate (int): The sampling rate of the biosignal data.
 
     Returns:
-        dict: Dictionary containing cleaned biosignal data for each channel.
+        pd.DataFrame: DataFrame containing cleaned biosignal data for each channel.
     """
-    cleaned_bio_data = {}
-    cleaned_time_ms = np.array(cleaned_time) * 1000 
-    sampled_times = np.arange(len(next(iter(sampled_bio_data.values())))) * 1000 / sample_rate 
+    cleaned_bio_data_df = pd.DataFrame()
 
-    for channel_name, signal_data in sampled_bio_data.items():
+    cleaned_time_ms = np.array(cleaned_time) * 1000
+    sampled_times = np.arange(len(sampled_bio_data)) * 1000 / sample_rate
+
+    for channel_name in sampled_bio_data.columns:
+        signal_data = sampled_bio_data[channel_name]
         cleaned_signal_data = []
+
         for t in cleaned_time_ms:
             frame_index = np.argmin(np.abs(sampled_times - t))
-            cleaned_signal_data.append(signal_data[frame_index])
-        cleaned_bio_data[channel_name] = cleaned_signal_data
-    
-    return cleaned_bio_data
+            cleaned_signal_data.append(signal_data.iloc[frame_index])
+
+        cleaned_bio_data_df[channel_name] = cleaned_signal_data
+
+    return cleaned_bio_data_df
 
 
 def get_biosignal_data_for_frames(cleaned_time, file_path, frame_duration_ms):
     """
-    Extracts biosignal data for each frame of the given duration.
+    Extracts biosignal data for frames.
 
     Args:
-        cleaned_time (ndarray): The cleaned time data in seconds.
-        file_path (str): The file path to the biosignal data.
+        cleaned_time (float): The time duration for cleaning the biosignal data.
+        file_path (str): The path to the biosignal data file.
         frame_duration_ms (int): The duration of each frame in milliseconds.
 
     Returns:
-        dict: Dictionary containing biosignal data for each channel.
+        pandas.DataFrame: The cleaned biosignal data for the frames.
     """
-    sampled_bio_data, sample_rate = sample_biosignal_data(file_path, frame_duration_ms)
-    cleaned_bio_data = clean_biosignal_data(cleaned_time, sampled_bio_data, sample_rate)
-    return cleaned_bio_data
+    sampled_bio_data_df, sample_rate = sample_biosignal_data(file_path, frame_duration_ms)
+    cleaned_bio_data_df = clean_biosignal_data(cleaned_time, sampled_bio_data_df, sample_rate)
+    return cleaned_bio_data_df

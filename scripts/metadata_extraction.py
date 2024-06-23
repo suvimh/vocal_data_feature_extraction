@@ -5,6 +5,7 @@
 
 import os
 import csv 
+import pandas as pd
 
 
 METADATA = "data/metadata.csv"
@@ -155,8 +156,8 @@ def get_sex(name, metadata=METADATA):
     with open(metadata, 'r') as file:
         reader = csv.DictReader(file)
         for row in reader:
-            if row['Sex'].strip().lower() == name.strip().lower():
-                return row['Participant number']
+            if row['Name'].strip().lower() == name.strip().lower():
+                return row['Sex']
     return None
 
 
@@ -234,4 +235,6 @@ def extract_metadata(file_path):
         'clip_number' : get_clip_number(file_path)
     }
 
-    return file_info
+    file_info_df = pd.DataFrame([file_info])
+
+    return file_info_df

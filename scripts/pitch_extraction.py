@@ -115,8 +115,8 @@ def sample_pitches(time, frequency, frame_duration_ms=10):
     sample_interval = frame_duration_ms / 1000
     num_samples = int(total_duration / sample_interval) + 1
 
-    sampled_time = np.linspace(0, total_duration, num_samples)
-    sampled_frequency = np.zeros(num_samples)
+    sampled_time = np.linspace(0, total_duration, num_samples, dtype=np.float32)
+    sampled_frequency = np.zeros(num_samples, dtype=np.float32)
 
     for i in range(num_samples):
         start_time = i * sample_interval
@@ -173,6 +173,6 @@ def clean_sampled_data(sampled_time, sampled_frequency):
 
             in_non_zero_segment = False
 
-    return np.array(cleaned_time), np.array(cleaned_frequency)
+    return np.array(cleaned_time, dtype=np.float32), np.array(cleaned_frequency, dtype=np.float32)
 
 
