@@ -10,7 +10,6 @@ import cv2
 import dlib
 import mediapipe as mp
 from tqdm.auto import tqdm
-import numpy as np
 import pandas as pd
 
 # Set up logging configuration
@@ -203,7 +202,7 @@ def get_dlib_face_landmarks(input_video_path, output_video_path=None, output_vid
         output_video (bool, optional): Whether to save the output video file. Defaults to False.
 
     Returns:
-        list: A list of facial landmarks for each frame in the video. Each facial landmark is represented as a list of [x, y, None].
+        pd.DataFrame: DataFrame containing facial landmarks for each frame.
     """
     detector = dlib.get_frontal_face_detector()
     predictor = dlib.shape_predictor(PROTO_PATH)  # Path to the dlib model
