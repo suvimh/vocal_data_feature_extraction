@@ -102,11 +102,19 @@ def get_mediapipe_landmarks(input_video_path, output_video_path=None, output_vid
             if pose_results.pose_landmarks:
                 landmarks = []
                 for landmark in pose_results.pose_landmarks.landmark:
-                    landmarks.append({
-                        'x': landmark.x,
-                        'y': landmark.y,
-                        'z': landmark.z if landmark.HasField('z') else None
-                    })
+                    if landmark.visibility < 0.5:
+                        # Landmark not visible in video, set as None
+                        landmarks.append({
+                            'x': None,
+                            'y': None,
+                            'z': None
+                        })
+                    else:
+                        landmarks.append({
+                            'x': landmark.x,
+                            'y': landmark.y,
+                            'z': landmark.z if landmark.HasField('z') else None
+                        })
                 pose_landmarks_list.append(landmarks)
                 mp_drawing.draw_landmarks(
                     image_copy,
