@@ -11,7 +11,7 @@ from scripts.csv_out import write_features_df_to_csv
 from tqdm.auto import tqdm
 import pandas as pd
 
-def process_data_folders(data_directory, csv_out, processed_folders_file, num_folders_to_process, frame_duration_ms=10, error_log_file='error_log.txt'):
+def process_data_folder(data_directory, csv_out, processed_folders_file, num_folders_to_process, frame_duration_ms=10, error_log_file='error_log.txt'):
     """
     Process the data folder by extracting features and metadata from files and saving them to a CSV file.
 
@@ -57,7 +57,8 @@ def process_data_folders(data_directory, csv_out, processed_folders_file, num_fo
                 # log the failed folder name 
                 with open(error_log_file, 'a') as log_file:
                     log_file.write(f'Error: {e.__cause__} in {folder}\n')
-                raise e  # Reraise the exception after logging it
+                pbar.update(1)
+                continue
 
     pbar.close()
 
