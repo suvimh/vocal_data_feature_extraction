@@ -11,7 +11,7 @@ from scripts.csv_out import write_features_df_to_csv
 from tqdm.auto import tqdm
 import pandas as pd
 
-def process_data_folder(data_directory, csv_out, processed_folders_file, num_folders_to_process, frame_duration_ms=10):
+def process_data_folders(data_directory, csv_out, processed_folders_file, num_folders_to_process, frame_duration_ms=10, error_log_file='error_log.txt'):
     """
     Process the data folder by extracting features and metadata from files and saving them to a CSV file.
 
@@ -21,6 +21,7 @@ def process_data_folder(data_directory, csv_out, processed_folders_file, num_fol
         processed_folders_file (str): The file that logs processed folders.
         num_folders_to_process (int): The number of folders to process. Set to 0 to process all folders.
         frame_duration_ms (int): The size of the frame in milliseconds. Default is 10.
+        error_log_file (str): The file that logs errors. Default is 'error_log.txt'.
     """
     # Load the list of already processed folders
     processed_folders = set()
@@ -28,35 +29,35 @@ def process_data_folder(data_directory, csv_out, processed_folders_file, num_fol
         with open(processed_folders_file, 'r') as log_file:
             processed_folders.update(line.strip() for line in log_file.readlines())
 
-    # Count all folders to be processed
-    if num_folders_to_process == 0:
-        folders_to_process = []
-        for root, dirs, _ in os.walk(data_directory):
-            if not dirs:  # Check if there are no subdirectories -- means we are at the last level
-                if root not in processed_folders:
-                    folders_to_process.append(root)
+    # Find all folders to be processed
+    folders_to_process = []
+    for root, dirs, _ in os.walk(data_directory):
+        if not dirs:  # Check if there are no subdirectories -- means we are at the last level
+            if root not in processed_folders:
+                folders_to_process.append(root)
 
+    # Determine the number of folders to process
+    if num_folders_to_process == 0:
         total_folders = len(folders_to_process)
     else:
-        total_folders = num_folders_to_process
+        total_folders = min(num_folders_to_process, len(folders_to_process))
 
     # Walk through the directory tree and process folders
+    processed_count = 0
     with tqdm(total=total_folders, desc="Processing folders") as pbar:
-        for root, dirs, _ in os.walk(data_directory):
-            if not dirs:  # Check if there are no subdirectories -- means we are at the last level
-                if root in processed_folders:
-                    pbar.update(1)
-                    continue  # Skip already processed folders
+        for folder in folders_to_process:
+            if processed_count >= total_folders:
+                break  # Stop after processing the required number of folders
 
-                process_folder(root, csv_out, processed_folders_file, processed_folders, frame_duration_ms)
+            try:
+                process_folder(folder, csv_out, processed_folders_file, processed_folders, frame_duration_ms)
+                processed_count += 1
                 pbar.update(1)
-
-                if num_folders_to_process != 0 and len(processed_folders) % num_folders_to_process == 0:
-                    print(f"Processed {num_folders_to_process} folders. Stopping.")
-                    break  # Stop after processing `num_folders_for_processing` folders
-
-            if num_folders_to_process == 0:
-                continue 
+            except Exception as e:
+                # log the failed folder name 
+                with open(error_log_file, 'a') as log_file:
+                    log_file.write(f'Error: {e.__cause__} in {folder}\n')
+                raise e  # Reraise the exception after logging it
 
     pbar.close()
 
@@ -75,16 +76,18 @@ def process_folder(root, csv_out, processed_folders_file, processed_folders, fra
     try:
         # Sort files into categories -- need to process mic file as reference file so that all files
         # have the same number of frames based on cleaned_time from mic audio -- removing any silence
-        mic_wav_files = [file for file in os.listdir(root) if file.endswith('.wav') and 'mic' in file]
-        other_wav_files = [file for file in os.listdir(root) if file.endswith('.wav') and 'mic' not in file]
-        mp4_files = [file for file in os.listdir(root) if file.endswith('.mp4')]
-        json_files = [file for file in os.listdir(root) if file.endswith('.json')]
+        mic_wav_files = [file for file in os.listdir(root) if file.endswith('.wav') and 'mic' in file and '._'  not in file]
+        other_wav_files = [file for file in os.listdir(root) if file.endswith('.wav') and 'mic' not in file and '._'  not in file]
+        mp4_files = [file for file in os.listdir(root) if file.endswith('.mp4') and '._'  not in file]
+        json_files = [file for file in os.listdir(root) if file.endswith('.json') and '._'  not in file]
 
         if len(mic_wav_files) != 1:
+            print(mic_wav_files)
             raise ValueError(f"Expected 1 mic audio file in folder, found {len(mic_wav_files)}")
         if len(other_wav_files) != 2:
             raise ValueError(f"Expected 2 other audio files in folder, found {len(other_wav_files)}")
         if len(mp4_files) != 2:
+            print(mp4_files)
             raise ValueError(f"Expected 2 video files in folder, found {len(mp4_files)}")
         if len(json_files) != 1:
             raise ValueError(f"Expected 1 json files in folder, found {len(json_files)}")
@@ -98,13 +101,13 @@ def process_folder(root, csv_out, processed_folders_file, processed_folders, fra
         #output to CSV
         write_features_df_to_csv(csv_out, features_df)
 
-        # Log the folder as processed
-        processed_folders.add(root)
-        with open(processed_folders_file, 'a') as log_file:
-            log_file.write(root + '\n')
-
-    except Exception as e:
-        raise ValueError(f"Error ({e}) processing data in folder: {root}")
+    except Exception as error:
+        raise Exception from error
+    
+    # Log the folder as processed if no exceptions occur
+    processed_folders.add(root)
+    with open(processed_folders_file, 'a') as log_file:
+        log_file.write(root + '\n')
 
 
 def process_biosignal_data(features_df, root, json_file, cleaned_time, mic_feature_length, frame_duration_ms):
@@ -162,7 +165,6 @@ def process_videos(features_df, root, mp4_files, cleaned_time, mic_feature_lengt
                     if len(pose_landmarks_df) != mic_feature_length:
                         raise ValueError(f"{source} pose frame number must match audio feature frame length")
                     features_df = pd.concat([features_df, pose_landmarks_df], axis=1)
-
                     face_landmarks_df = get_dlib_face_estimation_for_frames(cleaned_time, file_path, source=source)
                     if len(face_landmarks_df) != mic_feature_length:
                         raise ValueError(f"{source} face frame number must match audio feature frame length")

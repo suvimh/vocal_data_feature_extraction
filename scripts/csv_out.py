@@ -9,7 +9,7 @@ import pandas as pd
 
 def write_features_df_to_csv(csv_file, features_df):
     """
-    Write the features DataFrame to a CSV file.
+    Append the features DataFrame to a CSV file, creating the file if it doesn't exist.
 
     Args:
         csv_file (str): Path to the CSV file to write.
@@ -18,10 +18,14 @@ def write_features_df_to_csv(csv_file, features_df):
     Returns:
         None
     """
-    features_df.to_csv(csv_file, index=False)
+    try:
+        with open(csv_file, 'r') as f:
+            file_exists = True
+    except FileNotFoundError:
+        file_exists = False
 
-
-
+    # Write the DataFrame to CSV, appending if the file exists
+    features_df.to_csv(csv_file, mode='a', index=False, header=not file_exists)
 
 
 # def write_features_to_csv(output_file, metadata, features_for_audio_sources, features_for_video_sources, biosignal_data):

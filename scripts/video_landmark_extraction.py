@@ -13,7 +13,7 @@ from tqdm.auto import tqdm
 import pandas as pd
 
 # Set up logging configuration
-logging.basicConfig(level=logging.ERROR)
+#logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 PROTO_PATH = "data/shape_predictor_68_face_landmarks.dat"
@@ -34,16 +34,15 @@ def get_mediapipe_pose_estimation_for_frames(cleaned_time, input_file_path, outp
     Returns:
         list: The cleaned pose landmarks.
     """
-    logging.info(f"Processing mediapipe pose estimation for {input_file_path}.")
 
     if output_video or output_json:
         output_video_path, output_json_path = get_face_pose_output_paths(input_file_path, output_path, landmark_type='mp_pose')
 
     pose_landmarks_list = get_mediapipe_landmarks(input_file_path, output_video)
+    reshaped_pose_landmarks = reshape_pose_landmarks_dataframe(pose_landmarks_list, source)
 
     # Clean pose data based on cleaned audio data
     frame_rate = 25  # frames per second -- based on frame rate from shotcut output videos
-    reshaped_pose_landmarks = reshape_pose_landmarks_dataframe(pose_landmarks_list, source)
     cleaned_pose_landmarks = align_landmarks(cleaned_time, reshaped_pose_landmarks, frame_rate)
     
     #output json file with landmarks
@@ -92,7 +91,7 @@ def get_mediapipe_landmarks(input_video_path, output_video_path=None, output_vid
         while cap.isOpened():
             success, image = cap.read()
             if not success:
-                print("Ignoring empty video frame.")
+                #print("Ignoring empty video frame.")
                 break
 
             image_copy = image.copy()
@@ -176,7 +175,6 @@ def get_dlib_face_estimation_for_frames(cleaned_time, input_file_path, output_pa
     Returns:
         list: The cleaned face landmarks.
     """
-    logging.info(f"Processing dlib face landmarks for {input_file_path}.")
 
     output_video_path, output_json_path = None, None
     if output_video or output_json:
@@ -216,36 +214,44 @@ def get_dlib_face_landmarks(input_video_path, output_video_path=None, output_vid
     predictor = dlib.shape_predictor(PROTO_PATH)  # Path to the dlib model
 
     cap = cv2.VideoCapture(input_video_path)
+    if not cap.isOpened():
+        raise FileNotFoundError(f"Error: Could not open video {input_video_path}")
+
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     if output_video:
         out = cv2.VideoWriter(output_video_path, fourcc, 30, (int(cap.get(3)), int(cap.get(4))))
 
     face_landmarks_list = []
-
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    pbar2 = tqdm(total=total_frames, desc='Processing Frames')
+    frame_count = 0
 
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
+            #print(f"Finished processing or error reading frame at frame count: {frame_count}")
             break
 
+        frame_count += 1
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         faces = detector(gray)
 
-        for face in faces:
-            landmarks = predictor(gray, face)
-            face_landmarks = [[p.x, p.y, None] for p in landmarks.parts()]
-            face_landmarks_list.append(face_landmarks)
+        if len(faces) == 0:
+            face_landmarks_list.append([None] * 68)  # Assuming 68 landmarks for consistency
             
             if output_video:
-                for p in landmarks.parts():
-                    cv2.circle(frame, (p.x, p.y), 1, (0, 255, 0), -1)
+                # Draw a red circle in the top-left corner to indicate no face detected
+                cv2.circle(frame, (50, 50), 20, (0, 0, 255), -1)
                 out.write(frame)
+        else:
+            for face in faces:
+                landmarks = predictor(gray, face)
+                face_landmarks = [[p.x, p.y, None] for p in landmarks.parts()]
+                face_landmarks_list.append(face_landmarks)
 
-        pbar2.update(1)
+                if output_video:
+                    for p in landmarks.parts():
+                        cv2.circle(frame, (p.x, p.y), 1, (0, 255, 0), -1)
+                    out.write(frame)
 
-    pbar2.close()
     cap.release()
     if output_video:
         out.release()
@@ -269,13 +275,23 @@ def reshape_face_landmarks_dataframe(landmarks_df, source):
 
     coordinates = ["x", "y", "z"]
 
-    for column_name, column_data in landmarks_df.items():
-        for idx, value in enumerate(column_data):
-            if value is not None:  # Check if the value is not None
+    for column_name in landmarks_df.columns:
+        for idx, value in enumerate(landmarks_df[column_name]):
+            if value is not None:
                 x, y, z = value  # Extract x, y, z from the list [x, y, z]
-                for coord_idx, coord in enumerate(coordinates):
-                    new_col_name = f"{source}_face_landmark_{column_name+1}_{coord}"
-                    reshaped_df.loc[idx, new_col_name] = locals()[coord]  # Use locals() to access x, y, z by string
+            else:
+                x, y, z = None, None, None  # Set default values to None if the value is None
+
+            for coord_idx, coord in enumerate(coordinates):
+                new_col_name = f"{source}_face_landmark_{column_name+1}_{coord}"
+                reshaped_df.loc[idx, new_col_name] = locals()[coord]  # Use locals() to access x, y, z by string
+
+    # Ensure the reshaped DataFrame has all the necessary columns even if all values were None
+    for column_name in landmarks_df.columns:
+        for coord in coordinates:
+            new_col_name = f"{source}_face_landmark_{column_name+1}_{coord}"
+            if new_col_name not in reshaped_df.columns:
+                reshaped_df[new_col_name] = None
 
     return reshaped_df
 
@@ -294,20 +310,21 @@ def align_landmarks(cleaned_time, landmarks_df, frame_rate):
     """
     aligned_landmarks = []
     video_frame_duration_ms = 1000 / frame_rate
-
-    # Convert cleaned_time from seconds to milliseconds
     cleaned_time_ms = cleaned_time * 1000
 
-    # Iterate over cleaned_time and find corresponding frame indices
     for t in cleaned_time_ms:
         frame_index = int(t // video_frame_duration_ms)
+        # Ensure the frame_index is within bounds
         if frame_index < len(landmarks_df):
             aligned_landmarks.append(landmarks_df.iloc[frame_index])
+        else:
+            # Handle the edge case for the last element
+            aligned_landmarks.append(landmarks_df.iloc[-1])
 
-    # Concatenate the aligned landmarks into a single DataFrame
     aligned_df = pd.concat(aligned_landmarks, axis=1).T.reset_index(drop=True)
 
     return aligned_df
+
 
 
 def get_face_pose_output_paths(input_file_path, output_path, landmark_type):
