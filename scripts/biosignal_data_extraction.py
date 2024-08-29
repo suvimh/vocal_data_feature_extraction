@@ -1,6 +1,3 @@
-'''
-    EXTRACTING BIOSIGNAL DATA FROM VIDEO FILES IN 10MS FRAMES
-'''
 
 import os
 import json
@@ -60,21 +57,24 @@ def sample_biosignal_data(file_path, frame_duration_ms=10):
             for i in range(num_samples):
                 start_index = int(i * frame_duration_s * sample_rate)
                 end_index = start_index + int(frame_duration_s * sample_rate)
+
                 if end_index > len(signal_data):
                     break
                 frame_signal_data = signal_data[start_index:end_index]
                 midpoint_value = frame_signal_data[len(frame_signal_data) // 2]
+
                 sampled_signal_data.append(midpoint_value)
 
             sampled_bio_data[channel_name] = sampled_signal_data
     
     # Convert sampled_bio_data dictionary to DataFrame
     biosignal_df = pd.DataFrame(sampled_bio_data)
+
     
     return biosignal_df, sample_rate
 
 
-def clean_biosignal_data(cleaned_time, sampled_bio_data, sample_rate):
+def clean_biosignal_data(cleaned_time, sampled_bio_data, sample_rate, frame_duration_ms = 10):
     """
     Cleans the sampled biosignal data by keeping only the segments that correspond to the cleaned times.
 
@@ -89,8 +89,11 @@ def clean_biosignal_data(cleaned_time, sampled_bio_data, sample_rate):
     cleaned_bio_data_df = pd.DataFrame()
 
     cleaned_time_ms = np.array(cleaned_time) * 1000
-    sampled_times = np.arange(len(sampled_bio_data)) * 1000 / sample_rate
+    sampled_times = np.arange(0,len(sampled_bio_data) * frame_duration_ms, frame_duration_ms)
 
+    if len(cleaned_time_ms) == len(sampled_bio_data):
+      return sampled_bio_data
+    
     for channel_name in sampled_bio_data.columns:
         signal_data = sampled_bio_data[channel_name]
         cleaned_signal_data = []
@@ -105,7 +108,8 @@ def clean_biosignal_data(cleaned_time, sampled_bio_data, sample_rate):
 
 
 def get_biosignal_data_for_frames(cleaned_time, file_path, frame_duration_ms):
-    """
+
+  """
     Extracts biosignal data for frames.
 
     Args:
@@ -115,7 +119,7 @@ def get_biosignal_data_for_frames(cleaned_time, file_path, frame_duration_ms):
 
     Returns:
         pandas.DataFrame: The cleaned biosignal data for the frames.
-    """
-    sampled_bio_data_df, sample_rate = sample_biosignal_data(file_path, frame_duration_ms)
-    cleaned_bio_data_df = clean_biosignal_data(cleaned_time, sampled_bio_data_df, sample_rate)
-    return cleaned_bio_data_df
+  """
+  sampled_bio_data_df, sample_rate = sample_biosignal_data(file_path, frame_duration_ms)
+  cleaned_bio_data_df = clean_biosignal_data(cleaned_time, sampled_bio_data_df, sample_rate, frame_duration_ms)
+  return cleaned_bio_data_df

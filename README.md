@@ -18,8 +18,14 @@ The metadata of participants used to lable the output CSV rows with metadata is 
 
 RUNNING THE SCRIPTS
 If modules are not recognised, make sure that your project is in your path, 
-e.g. I would run the following:
-export PYTHONPATH="/Users/Suvi/Documents/UPF/THESIS/feature_extraction:$PYTHONPATH"
-
-
+e.g. run the following:
+export PYTHONPATH="/Users/XXX/Documents/UPF/THESIS/feature_extraction:$PYTHONPATH"
 export PYTHONPATH="path_to/feature_extraction:$PYTHONPATH"
+
+
+RUNNING IN COLAB
+The code has also been modified so that it runs within Google Colab. This version can be accessed at: 
+https://drive.google.com/drive/folders/1n0oCDDvmJ6Y0GNAAFF7UNw-SH2JxeegB?usp=sharing
+Note that this version of the code can be viewed. To run in Colab, all code and data needs to be within Google Drive, 
+paths updated accordingly and the module imports handled differently. This is all set up in the Google Colab notebook
+viewed in the link. 
