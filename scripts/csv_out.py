@@ -2,60 +2,123 @@
     FUNCTIONS TO HANDLE CSV OUTPUT OF DATA
 '''
 
-import csv
-import os
 import pandas as pd
+import os
 
-
-def write_features_df_to_csv(csv_file, features_df):
+def write_features_df_to_csv(csv_file, features_df, predefined_columns=None):
     """
     Append the features DataFrame to a CSV file, creating the file if it doesn't exist.
+    If the file is created for the first time, the header will be written based on the predefined columns.
 
     Args:
         csv_file (str): Path to the CSV file to write.
         features_df (pd.DataFrame): DataFrame containing all features.
+        predefined_columns (list): List of predefined column names to use in the header.
 
     Returns:
         None
     """
-    try:
-        with open(csv_file, 'r') as f:
-            file_exists = True
-    except FileNotFoundError:
-        file_exists = False
+    if predefined_columns is None:
+        predefined_columns = [
+      'participant_number','sex','age','experience_level',
+      'phonation','recording_condition','phrase','clip_number','mic_pitch',
+      'mic_note','mic_rms_energy','mic_spec_cent','mic_spec_spread',
+      'mic_spec_skew','mic_spec_kurt','mic_spec_slope','mic_spec_decr','mic_spec_rolloff',
+      'mic_spec_flat','mic_spec_crest','mic_tristimulus1','mic_tristimulus2',
+      'mic_tristimulus3','mic_mfcc_1','mic_mfcc_2','mic_mfcc_3','mic_mfcc_4',
+      'mic_mfcc_5','mic_mfcc_6','mic_mfcc_7','mic_mfcc_8','mic_mfcc_9','mic_mfcc_10',
+      'mic_mfcc_11','mic_mfcc_12','mic_mfcc_13','phone_pitch','phone_note','phone_rms_energy',
+      'phone_spec_cent','phone_spec_spread','phone_spec_skew','phone_spec_kurt',
+      'phone_spec_slope','phone_spec_decr','phone_spec_rolloff','phone_spec_flat',
+      'phone_spec_crest','phone_tristimulus1','phone_tristimulus2','phone_tristimulus3',
+      'phone_mfcc_1','phone_mfcc_2','phone_mfcc_3','phone_mfcc_4','phone_mfcc_5','phone_mfcc_6',
+      'phone_mfcc_7','phone_mfcc_8','phone_mfcc_9','phone_mfcc_10','phone_mfcc_11','phone_mfcc_12',
+      'phone_mfcc_13','computer_pitch','computer_note','computer_rms_energy','computer_spec_cent',
+      'computer_spec_spread','computer_spec_skew','computer_spec_kurt','computer_spec_slope',
+      'computer_spec_decr','computer_spec_rolloff','computer_spec_flat','computer_spec_crest',
+      'computer_tristimulus1','computer_tristimulus2','computer_tristimulus3','computer_mfcc_1',
+      'computer_mfcc_2','computer_mfcc_3','computer_mfcc_4','computer_mfcc_5','computer_mfcc_6',
+      'computer_mfcc_7','computer_mfcc_8','computer_mfcc_9','computer_mfcc_10','computer_mfcc_11',
+      'computer_mfcc_12','computer_mfcc_13','computer_pose_landmark_1_x','computer_pose_landmark_1_y',
+      'computer_pose_landmark_1_z','computer_pose_landmark_2_x','computer_pose_landmark_2_y',
+      'computer_pose_landmark_2_z','computer_pose_landmark_3_x','computer_pose_landmark_3_y',
+      'computer_pose_landmark_3_z','computer_pose_landmark_4_x','computer_pose_landmark_4_y',
+      'computer_pose_landmark_4_z','computer_pose_landmark_5_x','computer_pose_landmark_5_y',
+      'computer_pose_landmark_5_z','computer_pose_landmark_6_x','computer_pose_landmark_6_y',
+      'computer_pose_landmark_6_z','computer_pose_landmark_7_x','computer_pose_landmark_7_y',
+      'computer_pose_landmark_7_z','computer_pose_landmark_8_x','computer_pose_landmark_8_y',
+      'computer_pose_landmark_8_z','computer_pose_landmark_9_x','computer_pose_landmark_9_y',
+      'computer_pose_landmark_9_z','computer_pose_landmark_10_x','computer_pose_landmark_10_y',
+      'computer_pose_landmark_10_z','computer_pose_landmark_11_x','computer_pose_landmark_11_y',
+      'computer_pose_landmark_11_z','computer_pose_landmark_12_x','computer_pose_landmark_12_y',
+      'computer_pose_landmark_12_z','computer_pose_landmark_13_x','computer_pose_landmark_13_y',
+      'computer_pose_landmark_13_z','computer_pose_landmark_14_x','computer_pose_landmark_14_y',
+      'computer_pose_landmark_14_z','computer_pose_landmark_15_x','computer_pose_landmark_15_y',
+      'computer_pose_landmark_15_z','computer_pose_landmark_16_x','computer_pose_landmark_16_y',
+      'computer_pose_landmark_16_z','computer_pose_landmark_17_x','computer_pose_landmark_17_y',
+      'computer_pose_landmark_17_z','computer_pose_landmark_18_x','computer_pose_landmark_18_y',
+      'computer_pose_landmark_18_z','computer_pose_landmark_19_x','computer_pose_landmark_19_y',
+      'computer_pose_landmark_19_z','computer_pose_landmark_20_x','computer_pose_landmark_20_y',
+      'computer_pose_landmark_20_z','computer_pose_landmark_21_x','computer_pose_landmark_21_y',
+      'computer_pose_landmark_21_z','computer_pose_landmark_22_x','computer_pose_landmark_22_y',
+      'computer_pose_landmark_22_z','computer_pose_landmark_23_x','computer_pose_landmark_23_y',
+      'computer_pose_landmark_23_z','computer_pose_landmark_24_x','computer_pose_landmark_24_y',
+      'computer_pose_landmark_24_z','computer_pose_landmark_25_x','computer_pose_landmark_25_y',
+      'computer_pose_landmark_25_z','computer_pose_landmark_26_x','computer_pose_landmark_26_y',
+      'computer_pose_landmark_26_z','computer_pose_landmark_27_x','computer_pose_landmark_27_y',
+      'computer_pose_landmark_27_z','computer_pose_landmark_28_x','computer_pose_landmark_28_y',
+      'computer_pose_landmark_28_z','computer_pose_landmark_29_x','computer_pose_landmark_29_y',
+      'computer_pose_landmark_29_z','computer_pose_landmark_30_x','computer_pose_landmark_30_y',
+      'computer_pose_landmark_30_z','computer_pose_landmark_31_x','computer_pose_landmark_31_y',
+      'computer_pose_landmark_31_z','computer_pose_landmark_32_x','computer_pose_landmark_32_y',
+      'computer_pose_landmark_32_z','computer_pose_landmark_33_x','computer_pose_landmark_33_y',
+      'computer_pose_landmark_33_z','phone_pose_landmark_1_x','phone_pose_landmark_1_y',
+      'phone_pose_landmark_1_z','phone_pose_landmark_2_x','phone_pose_landmark_2_y',
+      'phone_pose_landmark_2_z','phone_pose_landmark_3_x','phone_pose_landmark_3_y',
+      'phone_pose_landmark_3_z','phone_pose_landmark_4_x','phone_pose_landmark_4_y',
+      'phone_pose_landmark_4_z','phone_pose_landmark_5_x','phone_pose_landmark_5_y',
+      'phone_pose_landmark_5_z','phone_pose_landmark_6_x','phone_pose_landmark_6_y',
+      'phone_pose_landmark_6_z','phone_pose_landmark_7_x','phone_pose_landmark_7_y',
+      'phone_pose_landmark_7_z','phone_pose_landmark_8_x','phone_pose_landmark_8_y',
+      'phone_pose_landmark_8_z','phone_pose_landmark_9_x','phone_pose_landmark_9_y',
+      'phone_pose_landmark_9_z','phone_pose_landmark_10_x','phone_pose_landmark_10_y',
+      'phone_pose_landmark_10_z','phone_pose_landmark_11_x','phone_pose_landmark_11_y',
+      'phone_pose_landmark_11_z','phone_pose_landmark_12_x','phone_pose_landmark_12_y',
+      'phone_pose_landmark_12_z','phone_pose_landmark_13_x','phone_pose_landmark_13_y',
+      'phone_pose_landmark_13_z','phone_pose_landmark_14_x','phone_pose_landmark_14_y',
+      'phone_pose_landmark_14_z','phone_pose_landmark_15_x','phone_pose_landmark_15_y',
+      'phone_pose_landmark_15_z','phone_pose_landmark_16_x','phone_pose_landmark_16_y',
+      'phone_pose_landmark_16_z','phone_pose_landmark_17_x','phone_pose_landmark_17_y',
+      'phone_pose_landmark_17_z','phone_pose_landmark_18_x','phone_pose_landmark_18_y',
+      'phone_pose_landmark_18_z','phone_pose_landmark_19_x','phone_pose_landmark_19_y',
+      'phone_pose_landmark_19_z','phone_pose_landmark_20_x','phone_pose_landmark_20_y',
+      'phone_pose_landmark_20_z','phone_pose_landmark_21_x','phone_pose_landmark_21_y',
+      'phone_pose_landmark_21_z','phone_pose_landmark_22_x','phone_pose_landmark_22_y',
+      'phone_pose_landmark_22_z','phone_pose_landmark_23_x','phone_pose_landmark_23_y',
+      'phone_pose_landmark_23_z','phone_pose_landmark_24_x','phone_pose_landmark_24_y',
+      'phone_pose_landmark_24_z','phone_pose_landmark_25_x','phone_pose_landmark_25_y',
+      'phone_pose_landmark_25_z','phone_pose_landmark_26_x','phone_pose_landmark_26_y',
+      'phone_pose_landmark_26_z','phone_pose_landmark_27_x','phone_pose_landmark_27_y',
+      'phone_pose_landmark_27_z','phone_pose_landmark_28_x','phone_pose_landmark_28_y',
+      'phone_pose_landmark_28_z','phone_pose_landmark_29_x','phone_pose_landmark_29_y',
+      'phone_pose_landmark_29_z','phone_pose_landmark_30_x','phone_pose_landmark_30_y',
+      'phone_pose_landmark_30_z','phone_pose_landmark_31_x','phone_pose_landmark_31_y',
+      'phone_pose_landmark_31_z','phone_pose_landmark_32_x','phone_pose_landmark_32_y',
+      'phone_pose_landmark_32_z','phone_pose_landmark_33_x','phone_pose_landmark_33_y',
+      'phone_pose_landmark_33_z','RESPIRATION_1','EMG_1','EEG_1','EEG_2'
+  ]
 
-    # Write the DataFrame to CSV, appending if the file exists
-    features_df.to_csv(csv_file, mode='a', index=False, header=not file_exists)
+    file_exists = os.path.exists(csv_file)
 
+    # Ensure the DataFrame contains all predefined columns, adding NaN where missing
+    features_df = features_df.reindex(columns=predefined_columns)
 
-# def write_features_to_csv(output_file, metadata, features_for_audio_sources, features_for_video_sources, biosignal_data):
-#     """
-#     Write audio features along with metadata to a CSV file.
-
-#     Parameters:
-#         output_file (str): The file path of the output CSV file.
-#         file_info (dict): Dictionary containing metadata about the file.
-#         features_for_audio_sources (dict): dict of dicts containing audio features (per frame) for different audio sources.
-#         features_for_video_sources (dict): dict of lists containing pose and face landmarks (per frame) for different video sources.
-#         biosignal_data (dict): Dictionary containing biosignal data (per frame) for different channels.
-#     """
-
-#     header = construct_csv_header(features_for_audio_sources, features_for_video_sources)
-#     file_exists = os.path.exists(output_file)
-
-#     with open(output_file, mode='a', newline='') as file:
-#         writer = csv.writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-#         if not file_exists:
-#                 writer.writerow(header)
-
-#         # Iterate over each frame and write the corresponding features to the CSV
-#         for frame in range(len(biosignal_data['EMG_1'])):
-#             row = write_metadata(metadata, frame)
-#             row.extend(write_audio_features(features_for_audio_sources, frame))
-#             row.extend(write_video_features(features_for_video_sources, frame))
-#             row.extend(write_biosignal_data(biosignal_data, frame))
-#             writer.writerow(row)
-
+    if not file_exists:
+        # If the file doesn't exist, write the header and the data
+        features_df.to_csv(csv_file, mode='w', index=False, header=True)
+    else:
+        # If the file exists, append the data without the header
+        features_df.to_csv(csv_file, mode='a', index=False, header=False)
 
 # def write_metadata(metadata, frame):
 #     return [

@@ -18,7 +18,7 @@ class AudioSourceError(Exception):
     pass
 
 
-def get_name(file_path):
+def get_participant_number(file_path):
     """
     Extracts the name from a given file path.
 
@@ -33,35 +33,21 @@ def get_name(file_path):
     """
     path_parts = file_path.split(os.sep)
 
-    # Extract the sixth folder from the end of the path
-    if len(path_parts) >= 6:
-        name = path_parts[-6]
-        name = name.replace('-m', '')
-        return name
+    if 'inexperienced' in file_path:
+      if len(path_parts) >= 5:
+        number = path_parts[-5].strip('P')
+        return number
+      else:
+        raise PathLengthError("Path is too short to extract the participant number.")
     else:
-        raise PathLengthError("Path is too short to extract the desired folder.")
+      # Extract the sixth folder from the end of the path
+      if len(path_parts) >= 6:
+          number = path_parts[-6].strip('P')
+          return number
+      else:
+          raise PathLengthError("Path is too short to extract the participant number.")
 
-
-def get_participant_number(name, metadata=METADATA):
-    """
-    Retrieves the participant number for a given name from the metadata file.
-
-    Args:
-        name (str): The name of the participant.
-        metadata (str): The path to the metadata file (default: METADATA).
-
-    Returns:
-        str or None: The participant number if found, None otherwise.
-    """
-    with open(metadata, 'r') as file:
-        reader = csv.DictReader(file)
-        for row in reader:
-            if row['Name'].strip().lower() == name.strip().lower():
-                return row['Participant number']
-    return None
-
-
-def get_age(name, metadata=METADATA):
+def get_age(number, metadata=METADATA):
     """
     Retrieves the age of a person based on their name from the given metadata file.
 
@@ -75,17 +61,17 @@ def get_age(name, metadata=METADATA):
     with open(metadata, 'r') as file:
         reader = csv.DictReader(file)
         for row in reader:
-            if row['Name'].strip().lower() == name.strip().lower():
+            if row['Participant number'].strip().lower() == number.strip().lower():
                 return row['Age']
     return None
 
 
-def get_experience_level(name, metadata=METADATA):
+def get_experience_level(number, metadata=METADATA):
     """
     Retrieves the experience level associated with a given name from the metadata file.
 
     Parameters:
-    - name (str): The name to search for in the metadata file.
+    - number (str): The number to search for in the metadata file.
     - metadata (str): The path to the metadata file (default: METADATA).
 
     Returns:
@@ -94,7 +80,7 @@ def get_experience_level(name, metadata=METADATA):
     with open(metadata, 'r') as file:
         reader = csv.DictReader(file)
         for row in reader:
-            if row['Name'].strip().lower() == name.strip().lower():
+            if row['Participant number'].strip().lower() == number.strip().lower():
                 return row['Experience level']
     return None
 
@@ -113,12 +99,15 @@ def get_phonation(file_path):
         PathLengthError: If the path is too short to extract the desired folder.
     """
     path_parts = file_path.split(os.sep)
-    # Extract the fifth folder from the end of the path
-    if len(path_parts) >= 5:
-        phonation = path_parts[-5]
-        return phonation
+    if 'inexperienced' in file_path:
+      return 'undefined'
     else:
-        raise PathLengthError("Path is too short to extract the desired folder.")
+      # Extract the fifth folder from the end of the path
+      if len(path_parts) >= 5:
+          phonation = path_parts[-5]
+          return phonation
+      else:
+          raise PathLengthError("Path is too short to extract the desired folder.")
 
 
 def get_recording_condition(file_path):
@@ -143,7 +132,7 @@ def get_recording_condition(file_path):
         raise PathLengthError("Path is too short to extract the desired folder.")
 
 
-def get_sex(name, metadata=METADATA):
+def get_sex(number, metadata=METADATA):
     """
     Determines the participant sex based on the file path.
 
@@ -156,7 +145,7 @@ def get_sex(name, metadata=METADATA):
     with open(metadata, 'r') as file:
         reader = csv.DictReader(file)
         for row in reader:
-            if row['Name'].strip().lower() == name.strip().lower():
+            if row['Participant number'].strip().lower() == number.strip().lower():
                 return row['Sex']
     return None
 
@@ -222,13 +211,13 @@ def extract_metadata(file_path):
         - 'phrase': The phrase extracted from the file.
         - 'clip_number': The clip number extracted from the file.
     """
-    name = get_name(file_path)
+    number = get_participant_number(file_path)
 
     file_info = {
-        'participant_number' : get_participant_number(name),
-        'sex' : get_sex(name),
-        'age' : get_age(name),
-        'experience_level' : get_experience_level(name),
+        'participant_number' : number,
+        'sex' : get_sex(number),
+        'age' : get_age(number),
+        'experience_level' : get_experience_level(number),
         'phonation' : get_phonation(file_path),
         'recording_condition' : get_recording_condition(file_path),
         'phrase' : get_phrase(file_path),

@@ -10,8 +10,12 @@ from scripts.biosignal_data_extraction import get_biosignal_data_for_frames
 from scripts.csv_out import write_features_df_to_csv
 from tqdm.auto import tqdm
 import pandas as pd
+import logging
 
-def process_data_folder(data_directory, csv_out, processed_folders_file, num_folders_to_process, frame_duration_ms=10, error_log_file='error_log.txt'):
+ERROR_LOG_FILE = "/content/drive/MyDrive/THESIS/thesis_data/THESIS_DATA/errors_out.log"
+logging.basicConfig(filename=ERROR_LOG_FILE, level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s")
+
+def process_data_folder(data_directory, csv_out, processed_folders_file, num_folders_to_process, frame_duration_ms=10):
     """
     Process the data folder by extracting features and metadata from files and saving them to a CSV file.
 
@@ -21,7 +25,6 @@ def process_data_folder(data_directory, csv_out, processed_folders_file, num_fol
         processed_folders_file (str): The file that logs processed folders.
         num_folders_to_process (int): The number of folders to process. Set to 0 to process all folders.
         frame_duration_ms (int): The size of the frame in milliseconds. Default is 10.
-        error_log_file (str): The file that logs errors. Default is 'error_log.txt'.
     """
     # Load the list of already processed folders
     processed_folders = set()
@@ -31,8 +34,9 @@ def process_data_folder(data_directory, csv_out, processed_folders_file, num_fol
 
     # Find all folders to be processed
     folders_to_process = []
-    for root, dirs, _ in os.walk(data_directory):
-        if not dirs:  # Check if there are no subdirectories -- means we are at the last level
+    for root, dirs, files in os.walk(data_directory):
+        dirs[:] = [d for d in dirs if d != '.ipynb_checkpoints']
+        if files and not dirs:  # Check if there are no subdirectories -- means we are at the last level
             if root not in processed_folders:
                 folders_to_process.append(root)
 
@@ -55,8 +59,7 @@ def process_data_folder(data_directory, csv_out, processed_folders_file, num_fol
                 pbar.update(1)
             except Exception as e:
                 # log the failed folder name 
-                with open(error_log_file, 'a') as log_file:
-                    log_file.write(f'Error: {e.__cause__} in {folder}\n')
+                logging.error(f'Error: {e.__cause__} in {folder}\n')
                 pbar.update(1)
                 continue
 
@@ -83,15 +86,13 @@ def process_folder(root, csv_out, processed_folders_file, processed_folders, fra
         json_files = [file for file in os.listdir(root) if file.endswith('.json') and '._'  not in file]
 
         if len(mic_wav_files) != 1:
-            print(mic_wav_files)
-            raise ValueError(f"Expected 1 mic audio file in folder, found {len(mic_wav_files)}")
+            logging.error(f"Expected 1 mic audio file in folder, found {len(mic_wav_files)}: {mic_wav_files}")
         if len(other_wav_files) != 2:
-            raise ValueError(f"Expected 2 other audio files in folder, found {len(other_wav_files)}")
+            logging.error(f"Expected 2 other audio files in folder, found {len(other_wav_files)}")
         if len(mp4_files) != 2:
-            print(mp4_files)
-            raise ValueError(f"Expected 2 video files in folder, found {len(mp4_files)}")
+            logging.error(f"Expected 2 video files in folder, found {len(mp4_files)}: {mp4_files}")
         if len(json_files) != 1:
-            raise ValueError(f"Expected 1 json files in folder, found {len(json_files)}")
+            logging.error(f"Expected 1 JSON file in folder, found {len(json_files)}")
 
         # combine everything into one dataframe 
         features_df, cleaned_time, mic_feature_length = process_mic_audio(root, mic_wav_files[0], frame_duration_ms)
@@ -130,10 +131,15 @@ def process_biosignal_data(features_df, root, json_file, cleaned_time, mic_featu
     """
     # already checked that just one file
     file_path = os.path.join(root, json_file)
-    biosignal_data_df = get_biosignal_data_for_frames(cleaned_time, file_path, frame_duration_ms)
-    if len(biosignal_data_df) != mic_feature_length:
-        raise ValueError("Biosignal data frame number must match audio feature frame length")
-    features_df = pd.concat([features_df, biosignal_data_df], axis=1)
+    if not os.path.isfile(file_path):
+        logging.error(f"File does not exist: {json_file}")
+        empty_df = pd.DataFrame(index=range(mic_feature_length))
+        features_df = pd.concat([features_df, empty_df], axis=1)
+    else:
+        biosignal_data_df = get_biosignal_data_for_frames(cleaned_time, file_path, frame_duration_ms)
+        if len(biosignal_data_df) != mic_feature_length:
+            logging.error("Biosignal data frame number must match audio feature frame length")
+        features_df = pd.concat([features_df, biosignal_data_df], axis=1)
     
     return features_df
 
@@ -157,22 +163,37 @@ def process_videos(features_df, root, mp4_files, cleaned_time, mic_feature_lengt
         ValueError: If the frame number of pose or face landmarks does not match the audio feature frame length.
         ValueError: If the video source of an mp4 file cannot be identified.
     """
+    valid_sources = ["phone", "computer"]
+    processed_sources = {source: False for source in valid_sources}
+
     for file in mp4_files:
         file_path = os.path.join(root, file)
-        if 'phone' in file or 'computer' in file:
-            for source in ["phone", "computer"]:
-                if source in file:
-                    pose_landmarks_df = get_mediapipe_pose_estimation_for_frames(cleaned_time, file_path, source=source)
-                    if len(pose_landmarks_df) != mic_feature_length:
-                        raise ValueError(f"{source} pose frame number must match audio feature frame length")
-                    features_df = pd.concat([features_df, pose_landmarks_df], axis=1)
-                    face_landmarks_df = get_dlib_face_estimation_for_frames(cleaned_time, file_path, source=source)
-                    if len(face_landmarks_df) != mic_feature_length:
-                        raise ValueError(f"{source} face frame number must match audio feature frame length")
-                    features_df = pd.concat([features_df, face_landmarks_df], axis=1)
-                    break
+
+        if not os.path.isfile(file_path):
+            logging.error(f"File does not exist: {file}")
+            continue
+
+        source = next ((s for s in valid_sources if s in file), None)
+        if source:
+            pose_landmarks_df = get_mediapipe_pose_estimation_for_frames(cleaned_time, file_path, source=source)
+            if len(pose_landmarks_df) != mic_feature_length:
+                logging.error(f"{source} pose frame number must match audio feature frame length")
+            features_df = pd.concat([features_df, pose_landmarks_df], axis=1)
+            # face_landmarks_df = get_dlib_face_estimation_for_frames(cleaned_time, file_path, source=source)
+            # if len(face_landmarks_df) != mic_feature_length:
+            #     logging.error(f"{source} face frame number must match audio feature frame length")
+            # features_df = pd.concat([features_df, face_landmarks_df], axis=1)
+            processed_sources[source] = True
         else:
-            raise ValueError(f"Cannot identify video source of mp4 file: {file}.")
+            logging.error(f"Cannot identify audio source of WAV file: {file}")
+
+    # Ensure missing sources are filled with empty DataFrames
+    for source, found in processed_sources.items():
+        if not found:
+            logging.warning(f"Missing {source} MP4 file, adding empty DataFrame")
+            empty_df = pd.DataFrame(index=range(mic_feature_length))
+            features_df = pd.concat([features_df, empty_df], axis=1)
+
     return features_df
 
 
@@ -194,20 +215,36 @@ def process_other_audio(features_df, root, other_wav_files, cleaned_time, mic_fe
     Raises:
         ValueError: If the audio source of a WAV file cannot be identified, or if the audio feature lists have different lengths.
     """
+    valid_sources = ["phone", "computer"]
+    processed_sources = {source: False for source in valid_sources}
+
     for file in other_wav_files:
         file_path = os.path.join(root, file)
-        if 'phone' in file or 'computer' in file:
-            for source in ["phone", "computer"]:
-                if source in file:
-                    audio_features_df, _ = extract_audio_features_for_frames(file_path, source=source, reference_audio=False, cleaned_time=cleaned_time, frame_duration_ms=frame_duration_ms)
-                    check_audio_feature_length(audio_features_df, source)
-                    if len(audio_features_df) != mic_feature_length:
-                        raise ValueError(f"{source} audio feature frame number must match audio feature frame length")
-                    features_df = pd.concat([features_df, audio_features_df], axis=1)
-                    break  # Found the correct source, no need to check further
+        if not os.path.isfile(file_path):
+            logging.error(f"File does not exist: {file}")
+            continue
+
+        source = next((s for s in valid_sources if s in file), None)
+        if source:
+            audio_features_df, _ = extract_audio_features_for_frames(
+                file_path, source=source, reference_audio=False, cleaned_time=cleaned_time, frame_duration_ms=frame_duration_ms
+            )
+            check_audio_feature_length(audio_features_df, source)
+            if len(audio_features_df) != mic_feature_length:
+                logging.error(f"{source} audio feature frame number must match mic feature frame length")
+                audio_features_df = pd.DataFrame(index=range(mic_feature_length)) 
+            features_df = pd.concat([features_df, audio_features_df], axis=1)
+            processed_sources[source] = True
         else:
-            raise ValueError(f"Cannot identify audio source of WAV file: {file}.")
-    
+            logging.error(f"Cannot identify audio source of WAV file: {file}")
+
+    # Ensure missing sources are filled with empty DataFrames
+    for source, found in processed_sources.items():
+        if not found:
+            logging.warning(f"Missing {source} WAV file, adding empty DataFrame")
+            empty_df = pd.DataFrame(index=range(mic_feature_length))
+            features_df = pd.concat([features_df, empty_df], axis=1)
+
     return features_df
 
 
@@ -226,18 +263,22 @@ def process_mic_audio(root, mic_wav_file, frame_duration_ms):
             - cleaned_time (float): Time taken for cleaning the audio.
             - mic_feature_length (int): Length of the microphone audio feature lists.
     """
-
     file_path = os.path.join(root, mic_wav_file) # only one file -- already checked in prior code
-    metadata_df = extract_metadata(file_path)
-    mic_audio_features_df, cleaned_time = extract_audio_features_for_frames(file_path, source='mic', reference_audio=True, frame_duration_ms=frame_duration_ms)
-
-    mic_feature_length = check_audio_feature_length(mic_audio_features_df, 'mic')
-    # reindex metadata_df to match mic_audio_features_df
-    metadata_df = metadata_df.reindex(mic_audio_features_df.index)
-    metadata_df_filled = metadata_df.ffill() # Fill forward to copy metadata across all rows
-    # Concatenate metadata_df_filled with mic_audio_features_df
-    metadata_audio_df = pd.concat([metadata_df_filled, mic_audio_features_df], axis=1)
-        
+    
+    if os.path.isfile(file_path):
+        metadata_df = extract_metadata(file_path)
+        mic_audio_features_df, cleaned_time = extract_audio_features_for_frames(file_path, source='mic', 
+                                                                                reference_audio=True, 
+                                                                                frame_duration_ms=frame_duration_ms)
+        mic_feature_length = check_audio_feature_length(mic_audio_features_df, 'mic')
+        # reindex metadata_df to match mic_audio_features_df
+        metadata_df = metadata_df.reindex(mic_audio_features_df.index)
+        metadata_df_filled = metadata_df.ffill() # Fill forward to copy metadata across all rows
+        # Concatenate metadata_df_filled with mic_audio_features_df
+        metadata_audio_df = pd.concat([metadata_df_filled, mic_audio_features_df], axis=1)
+    else:
+        raise TypeError(f"Mic file does not exist: {mic_wav_file}. Resuired as reference.")
+            
     return metadata_audio_df, cleaned_time, mic_feature_length
 
 
