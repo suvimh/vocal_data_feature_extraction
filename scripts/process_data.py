@@ -100,7 +100,7 @@ def process_folder(root, csv_out, processed_folders_file, processed_folders, fra
         features_df = process_videos(features_df, root, mp4_files, cleaned_time, mic_feature_length)
         features_df = process_biosignal_data(features_df, root, json_files[0], cleaned_time, mic_feature_length, frame_duration_ms)
         
-        #output to CSV
+        # output to CSV
         write_features_df_to_csv(csv_out, features_df)
 
     except Exception as error:
@@ -185,7 +185,7 @@ def process_videos(features_df, root, mp4_files, cleaned_time, mic_feature_lengt
             # features_df = pd.concat([features_df, face_landmarks_df], axis=1)
             processed_sources[source] = True
         else:
-            logging.error(f"Cannot identify audio source of WAV file: {file}")
+            logging.error(f"Cannot identify audio source of MP4 file: {file}")
 
     # Ensure missing sources are filled with empty DataFrames
     for source, found in processed_sources.items():

@@ -121,5 +121,10 @@ def get_biosignal_data_for_frames(cleaned_time, file_path, frame_duration_ms):
         pandas.DataFrame: The cleaned biosignal data for the frames.
   """
   sampled_bio_data_df, sample_rate = sample_biosignal_data(file_path, frame_duration_ms)
-  cleaned_bio_data_df = clean_biosignal_data(cleaned_time, sampled_bio_data_df, sample_rate, frame_duration_ms)
-  return cleaned_bio_data_df
+  if not sampled_bio_data_df.empty:
+      cleaned_bio_data_df = clean_biosignal_data(cleaned_time, sampled_bio_data_df, sample_rate, frame_duration_ms)
+      return cleaned_bio_data_df
+  else:
+      empty_frame = pd.DataFrame(index=range(len(cleaned_time)))
+      return empty_frame
+  
