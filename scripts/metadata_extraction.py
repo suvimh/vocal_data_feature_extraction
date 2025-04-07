@@ -47,22 +47,21 @@ def get_participant_number(file_path):
       else:
           raise PathLengthError("Path is too short to extract the participant number.")
 
-def get_age(number, metadata=METADATA):
+def get_lowest_note(number, metadata=METADATA):
     """
-    Retrieves the age of a person based on their name from the given metadata file.
+    Retrieve the lowest note sung by the participant.
 
     Args:
-        name (str): The name of the person.
-        metadata (str): The path to the metadata file (default: METADATA).
+        number (str): participant number.
 
     Returns:
-        str or None: The age of the person if found, None otherwise.
+        str: lowest note sung by the participant.
     """
     with open(metadata, 'r') as file:
         reader = csv.DictReader(file)
         for row in reader:
             if row['Participant number'].strip().lower() == number.strip().lower():
-                return row['Age']
+                return row['Lowest']
     return None
 
 
@@ -132,21 +131,21 @@ def get_recording_condition(file_path):
         raise PathLengthError("Path is too short to extract the desired folder.")
 
 
-def get_sex(number, metadata=METADATA):
+def get_highest_note(number, metadata=METADATA):
     """
-    Determines the participant sex based on the file path.
+    Retrieve the highest note sung by the participant.
 
     Args:
-        file_path (str): The path of the audio file.
+        number (str): participant number.
 
     Returns:
-        str: Sex of the participant.
+        str: highest note sung by the participant.
     """
     with open(metadata, 'r') as file:
         reader = csv.DictReader(file)
         for row in reader:
             if row['Participant number'].strip().lower() == number.strip().lower():
-                return row['Sex']
+                return row['Highest']
     return None
 
 
@@ -202,21 +201,22 @@ def extract_metadata(file_path):
 
     Returns:
     dict: A dictionary containing the extracted metadata. The dictionary has the following keys:
-        - 'participant_number': The participant number extracted from the file name.
-        - 'age': The age extracted from the file name.
-        - 'experience_level': The experience level extracted from the file name.
-        - 'phonation': The phonation extracted from the file.
-        - 'recording_condition': The recording condition extracted from the file.
-        - 'audio_source': The audio source extracted from the file.
-        - 'phrase': The phrase extracted from the file.
-        - 'clip_number': The clip number extracted from the file.
+        - 'participant_number': The participant number.
+        - 'highest_note': The highest note sung by the participant in recordings. 
+        - 'lowest_note': The lowest note sung by the participant in recordings.
+        - 'experience_level': The singing experience level of the participant.
+        - 'phonation': The phonation mode the participant was instructed to sing in.
+        - 'recording_condition': The recording condition of the session.
+        - 'audio_source': The audio source of the recording.
+        - 'phrase': The phrase sung.
+        - 'clip_number': The clip number (repetition of phrase).
     """
     number = get_participant_number(file_path)
 
     file_info = {
         'participant_number' : number,
-        'sex' : get_sex(number),
-        'age' : get_age(number),
+        'highest_note' : get_highest_note(number),
+        'lowest_note' : get_lowest_note(number),
         'experience_level' : get_experience_level(number),
         'phonation' : get_phonation(file_path),
         'recording_condition' : get_recording_condition(file_path),
